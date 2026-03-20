@@ -252,3 +252,15 @@ echo ""
 info "Logs: journalctl -u lte-modem -f"
 info "Logs: journalctl -u lte-watchdog -f"
 echo ""
+
+# Предотвратить вмешательство NetworkManager в WireGuard интерфейс
+header "Configuring NetworkManager"
+NM_CONF_DIR="/etc/NetworkManager/conf.d"
+mkdir -p "$NM_CONF_DIR"
+cat > "$NM_CONF_DIR/99-ltemod-unmanaged.conf" <<'NMEOF'
+[keyfile]
+# ltemod: do not manage WireGuard interface
+unmanaged-devices=interface-name:wg0
+NMEOF
+systemctl reload NetworkManager 2>/dev/null || true
+ok "NetworkManager will not interfere with $VPN_IFACE"

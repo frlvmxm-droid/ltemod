@@ -1,0 +1,20 @@
+[Unit]
+Description=LTE Modem Watchdog Timer
+Documentation=https://github.com/frlvmxm-droid/ltemod
+After=lte-modem.service
+
+[Timer]
+# Первый запуск через 2 минуты после загрузки системы
+OnBootSec=2min
+
+# Повторный запуск каждые 60 секунд
+OnUnitActiveSec=60s
+
+# Запускать watchdog.service
+Unit=lte-watchdog.service
+
+# Небольшой случайный разброс чтобы не все watchdog'и стартовали одновременно
+RandomizedDelaySec=5s
+
+[Install]
+WantedBy=timers.target

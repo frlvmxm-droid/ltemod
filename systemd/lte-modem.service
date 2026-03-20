@@ -1,0 +1,35 @@
+[Unit]
+Description=LTE Modem Connection (Sierra Wireless EM7565)
+Documentation=https://github.com/frlvmxm-droid/ltemod
+After=network.target NetworkManager.service ModemManager.service
+Wants=NetworkManager.service ModemManager.service
+# Не запускаться если нет устройства модема
+ConditionPathExists=/dev/cdc-wdm0
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+
+# Загрузить конфиг
+EnvironmentFile=/etc/ltemod/ltemod.conf
+
+# Подключить модем
+ExecStart=/usr/local/bin/ltemod/connect-modem.sh
+
+# Настроить маршрутизацию (прямой LTE режим по умолчанию)
+ExecStartPost=/usr/local/bin/ltemod/setup-routing.sh
+
+# Отключить при остановке сервиса
+ExecStop=/bin/bash -c 'nmcli connection down $NM_CON_NAME 2>/dev/null || true'
+
+# Ограничения
+TimeoutStartSec=120
+TimeoutStopSec=30
+
+# Логирование
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=lte-modem
+
+[Install]
+WantedBy=multi-user.target

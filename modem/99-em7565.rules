@@ -1,0 +1,32 @@
+# =============================================================================
+# 99-em7565.rules — udev правила для Sierra Wireless EM7565
+# Установка: /etc/udev/rules.d/99-em7565.rules
+# =============================================================================
+
+# Sierra Wireless EM7565 — MBIM режим (USB ID: 1199:9091)
+SUBSYSTEM=="usb", ATTRS{idVendor}=="1199", ATTRS{idProduct}=="9091", \
+    SYMLINK+="lte-usb", \
+    RUN+="/bin/systemctl start lte-modem.service"
+
+# Sierra Wireless EM7565 — QMI режим (USB ID: 1199:9090)
+SUBSYSTEM=="usb", ATTRS{idVendor}=="1199", ATTRS{idProduct}=="9090", \
+    SYMLINK+="lte-usb", \
+    RUN+="/bin/systemctl start lte-modem.service"
+
+# Sierra Wireless EM7565 — альтернативный USB ID (некоторые прошивки)
+SUBSYSTEM=="usb", ATTRS{idVendor}=="1199", ATTRS{idProduct}=="90c3", \
+    SYMLINK+="lte-usb", \
+    RUN+="/bin/systemctl start lte-modem.service"
+
+# Создать симлинк для MBIM control device (cdc-wdm)
+SUBSYSTEM=="usb", ATTRS{idVendor}=="1199", KERNEL=="cdc-wdm*", \
+    SYMLINK+="lte-modem"
+
+# Создать симлинк для сетевого интерфейса модема
+SUBSYSTEM=="net", ATTRS{idVendor}=="1199", \
+    SYMLINK+="lte-net"
+
+# При отключении модема — остановить сервис
+SUBSYSTEM=="usb", ATTRS{idVendor}=="1199", \
+    ATTRS{idProduct}=="9091|9090|90c3", ACTION=="remove", \
+    RUN+="/bin/systemctl stop lte-modem.service"

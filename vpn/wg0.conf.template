@@ -1,0 +1,42 @@
+# =============================================================================
+# wg0.conf.template — шаблон конфигурации WireGuard клиента
+#
+# ИНСТРУКЦИЯ:
+# 1. Скопируйте файл: cp wg0.conf.template wg0.conf
+# 2. Заполните плейсхолдеры YOUR_* реальными значениями
+# 3. Запустите: sudo bash /usr/local/bin/ltemod/setup-vpn.sh
+#
+# Получить ключи:
+#   wg genkey | tee privatekey | wg pubkey > publickey
+#   Приватный ключ → PrivateKey ниже
+#   Публичный ключ сервера → PublicKey в секции [Peer]
+# =============================================================================
+
+[Interface]
+# Ваш приватный ключ WireGuard клиента
+PrivateKey = YOUR_PRIVATE_KEY
+
+# IP адрес этого клиента в VPN-сети (уточните у администратора сервера)
+Address = YOUR_VPN_CLIENT_IP/32
+
+# DNS через VPN (можно оставить публичный или указать DNS сервера)
+DNS = 1.1.1.1, 8.8.8.8
+
+# ВАЖНО: Table=off отключает автоматическое добавление маршрутов wg-quick
+# Маршрутизацией управляет vpn-toggle.sh — это позволяет
+# включать/выключать VPN без перезапуска интерфейса
+Table = off
+
+[Peer]
+# Публичный ключ WireGuard сервера
+PublicKey = YOUR_SERVER_PUBLIC_KEY
+
+# Адрес и порт WireGuard сервера (публичный IP или домен)
+Endpoint = YOUR_SERVER_IP:51820
+
+# Весь трафик направить через VPN
+AllowedIPs = 0.0.0.0/0, ::/0
+
+# Keepalive для поддержания соединения через CGNAT (обязательно для LTE!)
+# LTE операторы используют CGNAT — без keepalive соединение разрывается
+PersistentKeepalive = 25

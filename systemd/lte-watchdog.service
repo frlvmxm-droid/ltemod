@@ -1,0 +1,22 @@
+[Unit]
+Description=LTE Modem Connection Watchdog
+Documentation=https://github.com/frlvmxm-droid/ltemod
+# Запускается таймером, а не напрямую
+After=lte-modem.service
+
+[Service]
+Type=oneshot
+
+# Загрузить конфиг
+EnvironmentFile=/etc/ltemod/ltemod.conf
+
+# Запустить watchdog
+ExecStart=/usr/local/bin/ltemod/modem-watchdog.sh
+
+# Логирование
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=lte-watchdog
+
+# Не падать если watchdog вернул ненулевой код (это штатно при попытке переподключения)
+SuccessExitStatus=0 1

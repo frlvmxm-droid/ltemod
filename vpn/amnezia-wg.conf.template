@@ -1,0 +1,42 @@
+# =============================================================================
+# AmneziaWG (Amnezia WireGuard) конфиг — шаблон
+# Обфусцированный WireGuard с защитой от DPI
+#
+# Заполнить плейсхолдеры YOUR_* и передать в:
+#   sudo setup-amnezia /path/to/awg0.conf
+# =============================================================================
+
+[Interface]
+PrivateKey = YOUR_AWG_PRIVATE_KEY
+Address = YOUR_AWG_CLIENT_IP/32
+DNS = 1.1.1.1, 8.8.8.8
+
+# Не добавлять маршруты автоматически (vpn-toggle.sh управляет маршрутами)
+Table = off
+
+# === Параметры обфускации AmneziaWG ===
+# Jc — количество junk-пакетов в начале handshake (1-128)
+Jc = 4
+
+# Jmin/Jmax — размер junk-пакетов в байтах
+Jmin = 40
+Jmax = 70
+
+# S1/S2 — дополнительные байты к пакетам инициации/ответа (0 = отключено)
+S1 = 0
+S2 = 0
+
+# H1-H4 — заголовки пакетов (менять только если сервер требует)
+H1 = 1
+H2 = 2
+H3 = 3
+H4 = 4
+
+[Peer]
+PublicKey = YOUR_AWG_SERVER_PUBLIC_KEY
+# PreSharedKey = YOUR_PRESHARED_KEY   # опционально, для дополнительной защиты
+Endpoint = YOUR_SERVER_IP:51820
+AllowedIPs = 0.0.0.0/0, ::/0
+
+# Критично для LTE с CGNAT — поддерживает NAT-сессию открытой
+PersistentKeepalive = 25

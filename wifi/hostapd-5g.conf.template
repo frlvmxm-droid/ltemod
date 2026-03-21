@@ -1,0 +1,36 @@
+## hostapd 5 GHz AP шаблон для Orange Pi 3 LTS (AP6256 / BCM4345)
+## Заполняется автоматически setup-ap.sh из ltemod.conf
+## НЕ редактировать вручную — изменения будут перезаписаны
+
+interface=WIFI_AP_IFACE_PLACEHOLDER
+driver=nl80211
+ssid=WIFI_AP_SSID_PLACEHOLDER
+
+# 5 GHz 802.11ac
+hw_mode=a
+channel=WIFI_AP_CHANNEL_5G_PLACEHOLDER
+ieee80211n=1
+ieee80211ac=1
+ht_capab=[HT40+][SHORT-GI-20][SHORT-GI-40]
+vht_capab=[SHORT-GI-80]
+vht_oper_chwidth=1
+wmm_enabled=1
+
+# Страна (влияет на разрешённые каналы и мощность)
+country_code=RU
+ieee80211d=1
+ieee80211h=1
+
+# Безопасность WPA2
+auth_algs=1
+wpa=2
+wpa_passphrase=WIFI_AP_PASSWORD_PLACEHOLDER
+wpa_key_mgmt=WPA-PSK
+wpa_pairwise=TKIP CCMP
+rsn_pairwise=CCMP
+
+# Скрыть SSID: 0 — видимая сеть, 1 — скрытая
+ignore_broadcast_ssid=0
+
+# Разрешить клиентам видеть друг друга (0 — изолировать клиентов)
+ap_isolate=0

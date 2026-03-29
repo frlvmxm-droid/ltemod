@@ -21,6 +21,9 @@ WIFI_AP_BAND="${WIFI_AP_BAND:-2g}"
 WIFI_AP_ENABLED="${WIFI_AP_ENABLED:-yes}"
 WIFI_CLIENT_IFACE="${WIFI_CLIENT_IFACE:-wlan1}"
 WIFI_CLIENT_ENABLED="${WIFI_CLIENT_ENABLED:-no}"
+BRIDGE_LAN_ENABLED="${BRIDGE_LAN_ENABLED:-no}"
+BRIDGE_IFACE="${BRIDGE_IFACE:-br0}"
+LAN_IFACE="${LAN_IFACE:-end0}"
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -109,19 +112,31 @@ section "WiFi Access Point"
 
 if [[ "$WIFI_AP_ENABLED" == "yes" ]]; then
     if pgrep -f "hostapd" > /dev/null 2>&1; then
-        ap_ip=$(ip addr show "$WIFI_AP_IFACE" 2>/dev/null | grep "inet " | awk '{print $2}' || echo "no IP")
         clients=$(iw dev "$WIFI_AP_IFACE" station dump 2>/dev/null | grep -c "^Station" || echo 0)
         ok "hostapd: RUNNING"
-        info "SSID: $WIFI_AP_SSID | Band: $WIFI_AP_BAND | IP: $ap_ip"
-        info "Connected WiFi clients: $clients"
+        info "SSID: $WIFI_AP_SSID | Band: $WIFI_AP_BAND"
+
+        if [[ "$BRIDGE_LAN_ENABLED" == "yes" ]]; then
+            if ip link show "$BRIDGE_IFACE" &>/dev/null 2>&1; then
+                br_ip=$(ip addr show "$BRIDGE_IFACE" 2>/dev/null | grep "inet " | awk '{print $2}' || echo "no IP")
+                ok "Bridge $BRIDGE_IFACE: UP | IP: $br_ip"
+                info "Members: $WIFI_AP_IFACE (WiFi, clients=$clients) + $LAN_IFACE (Ethernet)"
+            else
+                fail "Bridge $BRIDGE_IFACE: DOWN"
+            fi
+        else
+            ap_ip=$(ip addr show "$WIFI_AP_IFACE" 2>/dev/null | grep "inet " | awk '{print $2}' || echo "no IP")
+            info "IP: $ap_ip | WiFi clients: $clients"
+        fi
     else
         fail "WiFi AP (hostapd): NOT running"
         info "Start with: sudo systemctl start wifi-ap.service"
     fi
 
-    # 5GHz виртуальный интерфейс
+    # 5GHz виртуальный интерфейс (только в не-bridge режиме)
     iface_5g="${WIFI_AP_IFACE}_5g"
-    if [[ "$WIFI_AP_BAND" == "both" ]] && ip link show "$iface_5g" &>/dev/null 2>&1; then
+    if [[ "$BRIDGE_LAN_ENABLED" != "yes" && "$WIFI_AP_BAND" == "both" ]] && \
+       ip link show "$iface_5g" &>/dev/null 2>&1; then
         ap5_ip=$(ip addr show "$iface_5g" 2>/dev/null | grep "inet " | awk '{print $2}' || echo "no IP")
         clients5=$(iw dev "$iface_5g" station dump 2>/dev/null | grep -c "^Station" || echo 0)
         ok "5GHz ($iface_5g): UP | IP: $ap5_ip | Clients: $clients5"

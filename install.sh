@@ -78,6 +78,7 @@ PACKAGES=(
     dnsmasq
     wireless-tools
     iw
+    bridge-utils
     # Утилиты
     pciutils
     usbutils

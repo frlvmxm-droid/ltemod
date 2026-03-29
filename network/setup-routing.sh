@@ -15,6 +15,8 @@ LAN_IFACE="${LAN_IFACE:-end0}"
 WIFI_AP_IFACE="${WIFI_AP_IFACE:-wlan0}"
 WIFI_CLIENT_IFACE="${WIFI_CLIENT_IFACE:-wlan1}"
 WIFI_AP_ENABLED="${WIFI_AP_ENABLED:-yes}"
+BRIDGE_LAN_ENABLED="${BRIDGE_LAN_ENABLED:-no}"
+BRIDGE_IFACE="${BRIDGE_IFACE:-br0}"
 UPLINK_PRIORITY="${UPLINK_PRIORITY:-lte wifi eth}"
 RUNTIME_DIR="${RUNTIME_DIR:-/run/ltemod}"
 MODE_FILE="${MODE_FILE:-/run/ltemod/mode}"
@@ -127,27 +129,45 @@ if ! iptables -t nat -C POSTROUTING -o "$active_uplink" -j MASQUERADE &>/dev/nul
     log "Added MASQUERADE on $active_uplink"
 fi
 
-# FORWARD: LAN Ethernet → uplink
-if [[ "$WIFI_AP_ENABLED" != "yes" ]] || [[ "$active_uplink" != "$WIFI_AP_IFACE" ]]; then
-    if ! iptables -C FORWARD -i "$LAN_IFACE" -o "$active_uplink" -j ACCEPT &>/dev/null; then
-        iptables -A FORWARD -i "$LAN_IFACE" -o "$active_uplink" -j ACCEPT
+if [[ "$BRIDGE_LAN_ENABLED" == "yes" && "$WIFI_AP_ENABLED" == "yes" ]]; then
+    # Bridge-режим: wlan0 + end0 объединены в br0.
+    # FORWARD-правила для br0 выставляет setup-ap.sh при старте WiFi AP.
+    # Здесь добавляем только FORWARD br0 ↔ uplink на случай если
+    # setup-routing.sh запускается до wifi-ap.service.
+    if ! iptables -C FORWARD -i "$BRIDGE_IFACE" -o "$active_uplink" -j ACCEPT &>/dev/null 2>&1; then
+        iptables -A FORWARD -i "$BRIDGE_IFACE" -o "$active_uplink" -j ACCEPT
     fi
-    if ! iptables -C FORWARD -i "$active_uplink" -o "$LAN_IFACE" \
-            -m state --state RELATED,ESTABLISHED -j ACCEPT &>/dev/null; then
-        iptables -A FORWARD -i "$active_uplink" -o "$LAN_IFACE" \
-            -m state --state RELATED,ESTABLISHED -j ACCEPT
-    fi
-fi
-
-# FORWARD: WiFi AP → uplink (если AP включена и uplink — не сам AP интерфейс)
-if [[ "$WIFI_AP_ENABLED" == "yes" ]]; then
-    if ! iptables -C FORWARD -i "$WIFI_AP_IFACE" -o "$active_uplink" -j ACCEPT &>/dev/null 2>&1; then
-        iptables -A FORWARD -i "$WIFI_AP_IFACE" -o "$active_uplink" -j ACCEPT
-    fi
-    if ! iptables -C FORWARD -i "$active_uplink" -o "$WIFI_AP_IFACE" \
+    if ! iptables -C FORWARD -i "$active_uplink" -o "$BRIDGE_IFACE" \
             -m state --state RELATED,ESTABLISHED -j ACCEPT &>/dev/null 2>&1; then
-        iptables -A FORWARD -i "$active_uplink" -o "$WIFI_AP_IFACE" \
+        iptables -A FORWARD -i "$active_uplink" -o "$BRIDGE_IFACE" \
             -m state --state RELATED,ESTABLISHED -j ACCEPT
+    fi
+    log "Bridge mode: FORWARD rules set for $BRIDGE_IFACE ↔ $active_uplink"
+else
+    # Обычный режим: отдельные FORWARD для LAN (end0) и WiFi AP (wlan0)
+
+    # FORWARD: LAN Ethernet → uplink
+    if [[ "$WIFI_AP_ENABLED" != "yes" ]] || [[ "$active_uplink" != "$WIFI_AP_IFACE" ]]; then
+        if ! iptables -C FORWARD -i "$LAN_IFACE" -o "$active_uplink" -j ACCEPT &>/dev/null; then
+            iptables -A FORWARD -i "$LAN_IFACE" -o "$active_uplink" -j ACCEPT
+        fi
+        if ! iptables -C FORWARD -i "$active_uplink" -o "$LAN_IFACE" \
+                -m state --state RELATED,ESTABLISHED -j ACCEPT &>/dev/null; then
+            iptables -A FORWARD -i "$active_uplink" -o "$LAN_IFACE" \
+                -m state --state RELATED,ESTABLISHED -j ACCEPT
+        fi
+    fi
+
+    # FORWARD: WiFi AP → uplink
+    if [[ "$WIFI_AP_ENABLED" == "yes" ]]; then
+        if ! iptables -C FORWARD -i "$WIFI_AP_IFACE" -o "$active_uplink" -j ACCEPT &>/dev/null 2>&1; then
+            iptables -A FORWARD -i "$WIFI_AP_IFACE" -o "$active_uplink" -j ACCEPT
+        fi
+        if ! iptables -C FORWARD -i "$active_uplink" -o "$WIFI_AP_IFACE" \
+                -m state --state RELATED,ESTABLISHED -j ACCEPT &>/dev/null 2>&1; then
+            iptables -A FORWARD -i "$active_uplink" -o "$WIFI_AP_IFACE" \
+                -m state --state RELATED,ESTABLISHED -j ACCEPT
+        fi
     fi
 fi
 
@@ -156,5 +176,5 @@ echo "direct" > "$MODE_FILE"
 log "Routing mode set to: direct ($active_uplink)"
 
 log "=== Routing setup complete ==="
-log "Uplink: $active_uplink | LAN: $LAN_IFACE | WiFi AP: ${WIFI_AP_IFACE} (enabled=${WIFI_AP_ENABLED})"
+log "Uplink: $active_uplink | LAN: $LAN_IFACE | WiFi AP: ${WIFI_AP_IFACE} (enabled=${WIFI_AP_ENABLED}) | Bridge: ${BRIDGE_LAN_ENABLED}"
 log "Use 'vpn-toggle [wg|amnezia|vless] on' to enable VPN"

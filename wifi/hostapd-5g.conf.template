@@ -1,4 +1,4 @@
-## hostapd 5 GHz AP шаблон для Orange Pi 3 LTS (AP6256 / BCM4345)
+## hostapd 5 GHz AP шаблон для Orange Pi 3 LTS (AP6256 / BCM4345 / brcmfmac)
 ## Заполняется автоматически setup-ap.sh из ltemod.conf
 ## НЕ редактировать вручную — изменения будут перезаписаны
 
@@ -11,15 +11,14 @@ hw_mode=a
 channel=WIFI_AP_CHANNEL_5G_PLACEHOLDER
 ieee80211n=1
 ieee80211ac=1
-ht_capab=[HT40+][SHORT-GI-20][SHORT-GI-40]
+# brcmfmac: только HT20, без HT40 scan
+ht_capab=[SHORT-GI-20]
 vht_capab=[SHORT-GI-80]
-vht_oper_chwidth=1
+vht_oper_chwidth=0
 wmm_enabled=1
 
-# Страна (влияет на разрешённые каналы и мощность)
-country_code=RU
-ieee80211d=1
-ieee80211h=1
+# noscan: обязательно для brcmfmac
+noscan=1
 
 # Безопасность WPA2
 auth_algs=1

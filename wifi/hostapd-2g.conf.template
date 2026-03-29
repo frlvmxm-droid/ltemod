@@ -1,4 +1,4 @@
-## hostapd 2.4 GHz AP шаблон для Orange Pi 3 LTS (AP6256 / BCM4345)
+## hostapd 2.4 GHz AP шаблон для Orange Pi 3 LTS (AP6256 / BCM4345 / brcmfmac)
 ## Заполняется автоматически setup-ap.sh из ltemod.conf
 ## НЕ редактировать вручную — изменения будут перезаписаны
 
@@ -10,12 +10,17 @@ ssid=WIFI_AP_SSID_PLACEHOLDER
 hw_mode=g
 channel=WIFI_AP_CHANNEL_2G_PLACEHOLDER
 ieee80211n=1
-ht_capab=[HT40+][SHORT-GI-20][SHORT-GI-40]
+# brcmfmac не поддерживает HT40 scan — только HT20 (20MHz канал)
+ht_capab=[SHORT-GI-20]
 wmm_enabled=1
 
-# Страна (влияет на разрешённые каналы и мощность)
-country_code=RU
-ieee80211d=1
+# noscan: отключить обязательное сканирование соседей перед запуском AP
+# необходимо для brcmfmac (AP6256/BCM4345) — без этого hostapd падает с ret=-5
+noscan=1
+
+# Страна: устанавливается через iw reg, здесь не задаём чтобы не вызывать
+# принудительный regulatory scan (ieee80211d=1 + country_code = ошибка на brcmfmac)
+# country_code=RU  — установить отдельно: sudo iw reg set RU
 
 # Безопасность WPA2
 auth_algs=1

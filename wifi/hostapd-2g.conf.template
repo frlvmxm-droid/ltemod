@@ -6,21 +6,13 @@ interface=WIFI_AP_IFACE_PLACEHOLDER
 driver=nl80211
 ssid=WIFI_AP_SSID_PLACEHOLDER
 
-# 2.4 GHz
 hw_mode=g
 channel=WIFI_AP_CHANNEL_2G_PLACEHOLDER
-ieee80211n=1
-# brcmfmac не поддерживает HT40 scan — только HT20 (20MHz канал)
-ht_capab=[SHORT-GI-20]
 wmm_enabled=1
 
-# noscan: отключить обязательное сканирование соседей перед запуском AP
-# необходимо для brcmfmac (AP6256/BCM4345) — без этого hostapd падает с ret=-5
-noscan=1
-
-# Страна: устанавливается через iw reg, здесь не задаём чтобы не вызывать
-# принудительный regulatory scan (ieee80211d=1 + country_code = ошибка на brcmfmac)
-# country_code=RU  — установить отдельно: sudo iw reg set RU
+# Примечание: ieee80211n=1 отключён — brcmfmac (AP6256/BCM4345) вызывает
+# HT_SCAN при включённом N-режиме, что падает с ret=-5 на этом драйвере.
+# Скорость: до 54 Mbps (802.11g). Для N-режима нужен патч драйвера.
 
 # Безопасность WPA2
 auth_algs=1
@@ -30,8 +22,5 @@ wpa_key_mgmt=WPA-PSK
 wpa_pairwise=TKIP CCMP
 rsn_pairwise=CCMP
 
-# Скрыть SSID: 0 — видимая сеть, 1 — скрытая
 ignore_broadcast_ssid=0
-
-# Разрешить клиентам видеть друг друга (0 — изолировать клиентов)
 ap_isolate=0

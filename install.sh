@@ -221,10 +221,14 @@ install -m 755 "$SCRIPT_DIR/vpn/setup-vless.sh"       "$INSTALL_BIN/setup-vless.
 install -m 755 "$SCRIPT_DIR/wifi/setup-ap.sh"             "$INSTALL_BIN/setup-ap.sh"
 install -m 755 "$SCRIPT_DIR/wifi/setup-wifi-client.sh"    "$INSTALL_BIN/setup-wifi-client.sh"
 
+# Tools (диагностика и автодетект железа)
+install -m 755 "$SCRIPT_DIR/tools/detect-hardware.sh"     "$INSTALL_BIN/detect-hardware.sh"
+install -m 755 "$SCRIPT_DIR/tools/ltemod-doctor.sh"       "$INSTALL_BIN/ltemod-doctor.sh"
+
 ok "Scripts installed to $INSTALL_BIN"
 
 # Симлинки
-for cmd in vpn-toggle modem-status setup-vpn setup-amnezia setup-vless setup-ap setup-wifi-client; do
+for cmd in vpn-toggle modem-status setup-vpn setup-amnezia setup-vless setup-ap setup-wifi-client detect-hardware ltemod-doctor; do
     target="/usr/local/bin/${cmd}"
     ln -sf "$INSTALL_BIN/${cmd}.sh" "$target" 2>/dev/null || \
     ln -sf "$INSTALL_BIN/${cmd}"    "$target" 2>/dev/null || true
@@ -325,6 +329,14 @@ NMEOF
 systemctl reload NetworkManager 2>/dev/null || true
 ok "NetworkManager configured (won't interfere with AP/VPN interfaces)"
 
+# ===== Автоопределение железа =====
+
+header "Detecting hardware"
+info "Определяю сетевые интерфейсы этого устройства..."
+bash "$INSTALL_BIN/detect-hardware.sh" || true
+echo ""
+info "Записать найденные интерфейсы в конфиг: sudo detect-hardware --write"
+
 # ===== Итог =====
 
 echo ""
@@ -334,11 +346,14 @@ echo -e "${CYAN}╚════════════════════�
 echo ""
 echo "Next steps:"
 echo ""
-echo -e "  ${YELLOW}1. Настроить конфиг:${NC}"
+echo -e "  ${YELLOW}1. Автоопределить интерфейсы и настроить конфиг:${NC}"
+echo "     sudo detect-hardware --write     # LAN/WiFi/WWAN интерфейсы"
 echo "     sudo nano /etc/ltemod/ltemod.conf"
 echo "     → APN провайдера"
-echo "     → WIFI_AP_SSID, WIFI_AP_PASSWORD"
-echo "     → LAN_IFACE (проверить: ip link)"
+echo "     → WIFI_AP_SSID, WIFI_AP_PASSWORD (8..63 символов)"
+echo ""
+echo -e "  ${YELLOW}1.5 Проверить конфиг перед запуском:${NC}"
+echo "     sudo ltemod-doctor               # поймает ошибки заранее"
 echo ""
 echo -e "  ${YELLOW}2. Перезагрузить (WiFi AP запустится автоматически):${NC}"
 echo "     sudo reboot"

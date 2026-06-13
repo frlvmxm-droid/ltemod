@@ -207,11 +207,28 @@ restore_direct() {
     ok "FORWARD rules restored: direct $uplink"
 }
 
+# ---------------------------------------------------------------------------
+# Гарантировать, что активен только один VPN: если включён другой протокол —
+# корректно выключить его (с очисткой маршрутов и iptables) перед стартом нового.
+# ---------------------------------------------------------------------------
+ensure_single_vpn() {
+    local target="$1"
+    local cur
+    cur=$(get_mode)
+    [[ "$cur" == "$target" ]] && return 0
+    case "$cur" in
+        wg)      info "Switching from WireGuard → $target"; wg_off ;;
+        amnezia) info "Switching from AmneziaWG → $target"; amnezia_off ;;
+        vless)   info "Switching from VLESS → $target";     vless_off ;;
+    esac
+}
+
 # =============================================================================
 # WireGuard
 # =============================================================================
 wg_on() {
     log "Enabling WireGuard VPN..."
+    ensure_single_vpn "wg"
 
     if [[ ! -f "$WG_CONFIG" ]]; then
         log_err "WireGuard config not found: $WG_CONFIG"
@@ -258,6 +275,7 @@ wg_off() {
 # =============================================================================
 amnezia_on() {
     log "Enabling AmneziaWG VPN..."
+    ensure_single_vpn "amnezia"
 
     if ! command -v awg-quick &>/dev/null; then
         log_err "awg-quick not found. Install AmneziaWG first (see install.sh)"
@@ -310,6 +328,7 @@ amnezia_off() {
 # =============================================================================
 vless_on() {
     log "Enabling VLESS (sing-box)..."
+    ensure_single_vpn "vless"
 
     if ! command -v sing-box &>/dev/null; then
         log_err "sing-box not found. Run: sudo bash install.sh"

@@ -100,6 +100,11 @@ teardown_bridge() {
 # ---------------------------------------------------------------------------
 # Генерация конфига hostapd из шаблона
 # ---------------------------------------------------------------------------
+# Экранировать спецсимволы для строки замены sed (\, &, и разделитель |)
+# Без этого SSID/пароль с символами | & \ ломают подстановку и выдают
+# нерабочий конфиг без явной ошибки.
+sed_escape() { printf '%s' "$1" | sed -e 's/[&\\|]/\\&/g'; }
+
 generate_hostapd_conf() {
     local band="$1"    # "2g" или "5g"
     local iface="$2"   # интерфейс
@@ -118,10 +123,14 @@ generate_hostapd_conf() {
         return 1
     fi
 
+    local ssid_esc pass_esc
+    ssid_esc=$(sed_escape "$WIFI_AP_SSID")
+    pass_esc=$(sed_escape "$WIFI_AP_PASSWORD")
+
     sed \
         -e "s|WIFI_AP_IFACE_PLACEHOLDER|${iface}|g" \
-        -e "s|WIFI_AP_SSID_PLACEHOLDER|${WIFI_AP_SSID}|g" \
-        -e "s|WIFI_AP_PASSWORD_PLACEHOLDER|${WIFI_AP_PASSWORD}|g" \
+        -e "s|WIFI_AP_SSID_PLACEHOLDER|${ssid_esc}|g" \
+        -e "s|WIFI_AP_PASSWORD_PLACEHOLDER|${pass_esc}|g" \
         -e "s|WIFI_AP_CHANNEL_2G_PLACEHOLDER|${WIFI_AP_CHANNEL_2G}|g" \
         -e "s|WIFI_AP_CHANNEL_5G_PLACEHOLDER|${WIFI_AP_CHANNEL_5G}|g" \
         "$tmpl_src" > "$dest"
@@ -221,10 +230,46 @@ setup_ap_nat() {
 }
 
 # ---------------------------------------------------------------------------
+# Preflight: поймать типовые ошибки конфига ДО запуска hostapd
+# ---------------------------------------------------------------------------
+ap_preflight() {
+    local errors=0
+
+    # Длина пароля WPA: 8..63 (иначе hostapd молча падает)
+    local plen=${#WIFI_AP_PASSWORD}
+    if (( plen < 8 || plen > 63 )); then
+        log_err "WIFI_AP_PASSWORD must be 8..63 chars (now: $plen). Fix /etc/ltemod/ltemod.conf"
+        errors=$((errors+1))
+    fi
+
+    # Валидность канала
+    if [[ "$WIFI_AP_BAND" == "2g" || "$WIFI_AP_BAND" == "both" ]]; then
+        if ! [[ "$WIFI_AP_CHANNEL_2G" =~ ^[0-9]+$ ]] || (( WIFI_AP_CHANNEL_2G < 1 || WIFI_AP_CHANNEL_2G > 13 )); then
+            log_err "WIFI_AP_CHANNEL_2G='$WIFI_AP_CHANNEL_2G' invalid (use 1..13)"
+            errors=$((errors+1))
+        fi
+    fi
+
+    # Интерфейс существует
+    if ! ip link show "$WIFI_AP_IFACE" &>/dev/null; then
+        log_err "WiFi interface '$WIFI_AP_IFACE' not found. Run: detect-hardware.sh"
+        errors=$((errors+1))
+    fi
+
+    if (( errors > 0 )); then
+        log_err "Preflight failed ($errors error(s)). Подробнее: sudo ltemod-doctor"
+        return 1
+    fi
+    return 0
+}
+
+# ---------------------------------------------------------------------------
 # Запуск AP
 # ---------------------------------------------------------------------------
 ap_start() {
     log "=== Starting WiFi AP (band=$WIFI_AP_BAND, SSID=$WIFI_AP_SSID, bridge=$BRIDGE_LAN_ENABLED) ==="
+
+    ap_preflight || exit 1
 
     rfkill unblock wifi 2>/dev/null || true
 

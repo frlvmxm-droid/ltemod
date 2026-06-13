@@ -13,7 +13,9 @@ LTE + WiFi роутер на **Orange Pi 3 LTS** (Armbian) с поддержко
 | **WireGuard** | VPN туннель |
 | **AmneziaWG** | Обфусцированный WireGuard (обход DPI) |
 | **VLESS** | XTLS-Reality через sing-box |
-| **Watchdog** | Автоматическое переподключение LTE |
+| **Watchdog** | Автоматическое переподключение LTE (и VPN) |
+| **Автодетект** | Определение LAN/WiFi/WWAN интерфейсов под конкретное устройство |
+| **Doctor** | Диагностика конфига и окружения до запуска (ловит ошибки заранее) |
 
 ### Топология сети
 
@@ -44,10 +46,12 @@ cd /opt/ltemod
 sudo bash install.sh
 ```
 
-После установки отредактировать конфиг:
+После установки — автоопределить интерфейсы, отредактировать конфиг и проверить его:
 
 ```bash
-sudo nano /etc/ltemod/ltemod.conf
+sudo detect-hardware --write     # запишет LAN/WiFi/WWAN интерфейсы в конфиг
+sudo nano /etc/ltemod/ltemod.conf  # APN, имя сети, пароль (8..63 символов)
+sudo ltemod-doctor               # проверка перед запуском — поймает ошибки заранее
 ```
 
 ---
@@ -158,6 +162,23 @@ sudo modem-status
 
 Показывает: LTE сигнал / оператор, WiFi AP (клиенты), все VPN, маршруты, NAT.
 
+### Диагностика и автонастройка
+
+```bash
+sudo detect-hardware            # показать найденные LAN/WiFi/WWAN интерфейсы
+sudo detect-hardware --write    # записать их в /etc/ltemod/ltemod.conf
+sudo ltemod-doctor              # полная проверка конфига и окружения
+```
+
+`ltemod-doctor` проверяет: длину WiFi-пароля (8..63), валидность канала,
+наличие интерфейсов и поддержку драйвером AP-режима, непересечение подсетей,
+установленные зависимости и конфликтующие службы. Возвращает ненулевой код при
+наличии ошибок — удобно для автоматических проверок.
+
+> WiFi AP не стартует с заведомо битым конфигом: `setup-ap.sh` выполняет
+> встроенный preflight (пароль, канал, интерфейс) перед запуском hostapd и
+> печатает понятную причину в журнал.
+
 ---
 
 ## VPN — настройка с нуля
@@ -236,6 +257,9 @@ ltemod/
 │   ├── hostapd-2g.conf.template # шаблон hostapd 2.4GHz
 │   ├── hostapd-5g.conf.template # шаблон hostapd 5GHz
 │   └── 10-wifi-ap.conf         # NM: не управлять wlan0
+├── tools/
+│   ├── detect-hardware.sh      # автодетект LAN/WiFi/WWAN интерфейсов
+│   └── ltemod-doctor.sh        # диагностика конфига и окружения
 └── systemd/
     ├── lte-modem.service       # запуск LTE при старте
     ├── lte-watchdog.service    # watchdog сервис

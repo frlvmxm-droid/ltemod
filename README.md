@@ -75,6 +75,18 @@ WWAN_IFACE="wwan0"      # интерфейс модема
 LAN_IFACE="end0"        # Ethernet порт
 ```
 
+Готовые значения для российских операторов — в папке [`examples/operators/`](examples/operators/):
+
+| Оператор | APN | USSD баланс |
+|----------|-----|-------------|
+| МТС | `internet.mts.ru` | `*100#` |
+| Tele2 | `m.tele2.ru` | `*100#` |
+| Билайн | `internet.beeline.ru` | `*102#` |
+| МегаФон | `internet` | `#100#` |
+| Yota | `yota.ru` | нет (только my.yota.ru) |
+
+Каждый файл содержит значения для прямой вставки в `/etc/ltemod/ltemod.conf`.
+
 ### WiFi точка доступа
 
 ```bash
@@ -382,6 +394,8 @@ sudo ltemod-uninstall --purge    # удалить всё, включая /etc/lt
 ```
 ltemod/
 ├── install.sh                  # установщик
+├── examples/
+│   └── operators/              # конфиги операторов (МТС, Tele2, Билайн, МегаФон, Yota)
 ├── uninstall.sh                # деинсталлятор (--purge для полного удаления)
 ├── config/
 │   └── ltemod.conf             # центральный конфиг (шаблон)

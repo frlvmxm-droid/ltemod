@@ -297,7 +297,9 @@ ap_start() {
                 ok "hostapd started: 2.4 GHz on $WIFI_AP_IFACE"
 
                 if ip link show "$IFACE_5G" &>/dev/null; then
-                    ap_5g_ip=$(echo "$WIFI_AP_IP" | sed 's/\.1$/\.65/')
+                    # 5GHz получает отдельный host-октет (.65) в той же /24 подсети,
+                    # независимо от того, чем заканчивается WIFI_AP_IP
+                    ap_5g_ip="$(echo "$WIFI_AP_IP" | cut -d. -f1-3).65"
                     generate_hostapd_conf "5g" "$IFACE_5G"
                     ip addr flush dev "$IFACE_5G" 2>/dev/null || true
                     ip addr add "${ap_5g_ip}/24" dev "$IFACE_5G"

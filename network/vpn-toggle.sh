@@ -81,6 +81,9 @@ setup_vpn_routes() {
         if [[ -n "$gw" ]]; then
             ip route replace "$endpoint/32" via "$gw" dev "$uplink" 2>/dev/null || true
             log "Endpoint route: $endpoint via $gw ($uplink)"
+            # Сохранить endpoint, чтобы restore_direct() мог удалить этот маршрут
+            mkdir -p "$RUNTIME_DIR"
+            echo "$endpoint" > "$RUNTIME_DIR/vpn_endpoint"
         fi
     fi
 
@@ -160,8 +163,16 @@ restore_direct() {
         ok "Default route restored: $uplink"
     fi
 
-    # Убрать защитный endpoint маршрут
-    ip route del 0.0.0.0/0 dev "$vpn_iface" 2>/dev/null || true
+    # Убрать защитный endpoint маршрут (endpoint/32 via gw dev uplink)
+    if [[ -f "$RUNTIME_DIR/vpn_endpoint" ]]; then
+        local endpoint
+        endpoint=$(cat "$RUNTIME_DIR/vpn_endpoint")
+        if [[ -n "$endpoint" ]]; then
+            ip route del "$endpoint/32" 2>/dev/null || true
+            log "Removed endpoint route: $endpoint"
+        fi
+        rm -f "$RUNTIME_DIR/vpn_endpoint"
+    fi
 
     # Восстановить iptables
     iptables -t nat -D POSTROUTING -o "$vpn_iface" -j MASQUERADE 2>/dev/null || true

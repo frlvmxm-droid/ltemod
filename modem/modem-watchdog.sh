@@ -16,6 +16,8 @@ RUNTIME_DIR="${RUNTIME_DIR:-/run/ltemod}"
 MODE_FILE="${MODE_FILE:-/run/ltemod/mode}"
 WWAN_IFACE="${WWAN_IFACE:-wwan0}"
 VPN_IFACE="${VPN_IFACE:-wg0}"
+AMNEZIA_IFACE="${AMNEZIA_IFACE:-awg0}"
+VLESS_TUN_IFACE="${VLESS_TUN_IFACE:-tun0}"
 LOG_TAG="${LOG_TAG:-ltemod}"
 NM_CON_NAME="${NM_CON_NAME:-lte-connection}"
 
@@ -56,6 +58,24 @@ get_mode() {
     fi
 }
 
+# Является ли режим VPN-режимом (любой из протоколов)
+mode_is_vpn() {
+    case "$1" in
+        wg|amnezia|vless) return 0 ;;
+        *)                return 1 ;;
+    esac
+}
+
+# Интерфейс, соответствующий VPN-режиму
+vpn_iface_for_mode() {
+    case "$1" in
+        wg)      echo "$VPN_IFACE" ;;
+        amnezia) echo "$AMNEZIA_IFACE" ;;
+        vless)   echo "$VLESS_TUN_IFACE" ;;
+        *)       echo "" ;;
+    esac
+}
+
 # Проверить LTE интерфейс
 check_lte_iface() {
     if ! ip link show "$WWAN_IFACE" &>/dev/null; then
@@ -67,9 +87,12 @@ check_lte_iface() {
     return 0
 }
 
-# Проверить VPN интерфейс
+# Проверить VPN интерфейс для текущего режима
 check_vpn_iface() {
-    if ! ip link show "$VPN_IFACE" &>/dev/null; then
+    local iface
+    iface=$(vpn_iface_for_mode "$(get_mode)")
+    [[ -z "$iface" ]] && return 1
+    if ! ip link show "$iface" &>/dev/null; then
         return 1
     fi
     return 0
@@ -123,15 +146,20 @@ reconnect_lte() {
     return 1
 }
 
-# Восстановить VPN если был активен
+# Восстановить VPN если был активен (тот же протокол, что был включён)
 reconnect_vpn() {
     local mode
     mode=$(get_mode)
-    if [[ "$mode" == "vpn" ]]; then
-        log "VPN mode active, re-enabling WireGuard..."
+    if mode_is_vpn "$mode"; then
+        log "VPN mode active ($mode), re-enabling..."
         local toggle_script="/usr/local/bin/ltemod/vpn-toggle.sh"
+        if [[ ! -f "$toggle_script" ]]; then
+            toggle_script="$(dirname "$0")/../network/vpn-toggle.sh"
+        fi
         if [[ -f "$toggle_script" ]]; then
-            bash "$toggle_script" on || log_err "Failed to re-enable VPN"
+            bash "$toggle_script" "$mode" on || log_err "Failed to re-enable VPN ($mode)"
+        else
+            log_err "vpn-toggle.sh not found, cannot re-enable VPN"
         fi
     fi
 }
@@ -149,9 +177,9 @@ fi
 
 # Проверить режим VPN
 mode=$(get_mode)
-if [[ "$mode" == "vpn" ]]; then
+if mode_is_vpn "$mode"; then
     if ! check_vpn_iface; then
-        log_err "VPN interface $VPN_IFACE is DOWN while VPN mode is active"
+        log_err "VPN interface $(vpn_iface_for_mode "$mode") is DOWN while VPN mode ($mode) is active"
     fi
 fi
 

@@ -15,6 +15,8 @@ LTE + WiFi роутер на **Orange Pi 3 LTS** (Armbian) с поддержко
 | **VLESS** | XTLS-Reality через sing-box |
 | **Профили VPN** | Несколько именованных конфигов, переключение одной командой |
 | **Kill-switch** | Блокировка трафика при падении VPN + защита от DNS-leak |
+| **Bypass routing** | Избирательная маршрутизация: обход блокировок РКН или исключения для банков/сервисов |
+| **Списки блокировок** | Автозагрузка/обновление списков доменов и IP с поддержкой preset-ов |
 | **Учёт трафика** | Расход данных LTE по дням/месяцам (vnstat) |
 | **SMS / USSD** | Баланс и SMS оператора через модем |
 | **Watchdog** | Автоматическое переподключение LTE (и VPN) |
@@ -184,6 +186,88 @@ VPN_DNS_REDIRECT="yes"    # перехват DNS клиентов на роут�
 sudo killswitch status    # проверить состояние защиты
 ```
 
+### Обход блокировок (bypass routing)
+
+Избирательная маршрутизация, аналогичная podkop: конкретные домены/IP идут через VPN
+(или в обход него), остальной трафик — как настроено. Реализовано через **ipset +
+iptables mangle + policy routing + dnsmasq ipset**. При разрешении домена через DNS
+его IP автоматически попадает в ipset — последующие соединения маршрутизируются
+правильно даже без повторного DNS-запроса.
+
+#### Режимы
+
+| Режим | Описание | Когда использовать |
+|-------|----------|-------------------|
+| `selective` | Заблокированные домены/IP → VPN; остальное → прямой uplink | Нет постоянного VPN, нужен обход конкретных блокировок РКН |
+| `exclude`  | VPN для всего, исключения (банки, Госуслуги) → прямой uplink | Постоянный full-tunnel VPN, но нужны российские сервисы |
+
+#### Быстрый старт
+
+```bash
+# 1. Включить в конфиге
+sudo nano /etc/ltemod/ltemod.conf
+#   BYPASS_ENABLED="yes"
+#   BYPASS_MODE="selective"          # или exclude
+#   BYPASS_LIST_PRESET="russia-inside"  # для selective; russia-outside для exclude
+
+# 2. Скачать списки блокировок
+sudo list-manager update             # скачает russia-inside (домены + IP)
+sudo list-manager status             # проверить: кол-во записей в ipset/dnsmasq
+
+# 3. Включить VPN (для selective — туннель должен быть поднят)
+sudo vpn-toggle wg on                # или amnezia/vless
+
+# 4. Проверить
+bypass-routing status
+ip rule show                         # должно быть: fwmark 0x64 lookup 100
+iptables -t mangle -L PREROUTING    # должны быть MARK правила для ltemod_bypass_*
+```
+
+#### Команды
+
+```bash
+sudo list-manager update              # скачать preset + загрузить в ipset/dnsmasq
+sudo list-manager update russia-outside  # конкретный preset
+sudo list-manager load                # перезагрузить уже скачанные файлы
+sudo list-manager status              # файлы, размеры, счётчики ipset
+sudo list-manager flush               # очистить ipset и dnsmasq
+
+sudo bypass-routing status            # активные правила и счётчики
+sudo bypass-routing add-ip 1.2.3.4   # добавить IP вручную
+sudo bypass-routing add-net 1.2.3.0/24
+sudo bypass-routing flush             # очистить ipsets (не трогает правила)
+```
+
+#### Конфиг
+
+```bash
+BYPASS_ENABLED="yes"
+BYPASS_MODE="selective"              # selective | exclude
+BYPASS_LIST_PRESET="russia-inside"  # russia-inside | russia-outside | none
+BYPASS_LIST_URLS=""                  # дополнительные URL (через пробел)
+BYPASS_TABLE="100"                   # таблица policy routing (не менять без причины)
+BYPASS_FWMARK="0x64"                 # firewall mark для bypass-трафика
+```
+
+#### Presets (источник: [itdoginfo/allow-domains](https://github.com/itdoginfo/allow-domains))
+
+| Preset | Содержит | Подходит для |
+|--------|----------|-------------|
+| `russia-inside` | Домены, заблокированные РКН (~700k) + их IP | `selective`: обход блокировок |
+| `russia-outside` | Сервисы, блокирующие VPN-IP (банки, госпортал) + их IP | `exclude`: работа сервисов на full-VPN |
+
+#### Автообновление
+
+Списки обновляются автоматически каждый день в 04:00 через systemd timer:
+
+```bash
+sudo systemctl status ltemod-bypass-update.timer
+sudo systemctl start ltemod-bypass-update.service  # принудительное обновление
+journalctl -u ltemod-bypass-update -f
+```
+
+---
+
 ### LTE: расход трафика и баланс
 
 ```bash
@@ -311,7 +395,10 @@ ltemod/
 ├── network/
 │   ├── setup-routing.sh        # настройка маршрутизации и NAT
 │   ├── vpn-toggle.sh           # переключение VPN протоколов
-│   └── killswitch.sh           # kill-switch + защита от DNS-leak
+│   ├── killswitch.sh           # kill-switch + защита от DNS-leak
+│   ├── bypass-routing.sh       # избирательная маршрутизация (ipset+policy routing)
+│   └── lists/
+│       └── list-manager.sh     # менеджер списков блокировок (загрузка, ipset, dnsmasq)
 ├── vpn/
 │   ├── setup-vpn.sh            # установка WireGuard конфига
 │   ├── setup-amnezia.sh        # установка AmneziaWG конфига
@@ -330,10 +417,12 @@ ltemod/
 │   ├── detect-hardware.sh      # автодетект LAN/WiFi/WWAN интерфейсов
 │   └── ltemod-doctor.sh        # диагностика конфига и окружения
 └── systemd/
-    ├── lte-modem.service       # запуск LTE при старте
-    ├── lte-watchdog.service    # watchdog сервис
-    ├── lte-watchdog.timer      # watchdog таймер (каждые 5 мин)
-    └── wifi-ap.service         # автостарт WiFi AP
+    ├── lte-modem.service               # запуск LTE при старте
+    ├── lte-watchdog.service            # watchdog сервис
+    ├── lte-watchdog.timer              # watchdog таймер (каждые 5 мин)
+    ├── wifi-ap.service                 # автостарт WiFi AP
+    ├── ltemod-bypass-update.service    # обновление bypass-списков
+    └── ltemod-bypass-update.timer      # ежедневный таймер (04:00)
 ```
 
 ---

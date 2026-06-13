@@ -33,6 +33,11 @@ VLESS_TUN_IFACE="${VLESS_TUN_IFACE:-tun0}"
 RUNTIME_DIR="${RUNTIME_DIR:-/run/ltemod}"
 MODE_FILE="${MODE_FILE:-/run/ltemod/mode}"
 LOG_TAG="${LOG_TAG:-ltemod}"
+BYPASS_ENABLED="${BYPASS_ENABLED:-no}"
+BYPASS_MODE="${BYPASS_MODE:-selective}"
+
+BYPASS_SH="/usr/local/bin/ltemod/bypass-routing.sh"
+[[ -f "$BYPASS_SH" ]] || BYPASS_SH="$(dirname "$0")/bypass-routing.sh"
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -108,6 +113,19 @@ setup_vpn_routes() {
         fi
     fi
 
+    # В selective-режиме bypass-routing.sh управляет таблицей маршрутов сам:
+    # VPN — только для помеченного трафика, основной маршрут остаётся через uplink.
+    if [[ "$BYPASS_ENABLED" == "yes" && "$BYPASS_MODE" == "selective" ]]; then
+        log "Bypass selective mode: skipping full-tunnel default route"
+        # Удалить дефолтный маршрут, который wg-quick/awg-quick мог добавить сам
+        ip route del default dev "$vpn_iface" 2>/dev/null || true
+        # Настроить selective bypass (ipset + policy routing)
+        if [[ -f "$BYPASS_SH" ]]; then
+            bash "$BYPASS_SH" on selective "$vpn_iface" "$uplink"
+        fi
+        return 0
+    fi
+
     # Сохранить текущий uplink route как резервный (metric 200)
     if ip route show default dev "$uplink" &>/dev/null 2>&1; then
         ip route del default dev "$uplink" 2>/dev/null || true
@@ -119,6 +137,13 @@ setup_vpn_routes() {
     ip route add default dev "$vpn_iface" metric 100 2>/dev/null || \
     ip route replace default dev "$vpn_iface" metric 100
     ok "Default route: $vpn_iface (metric 100)"
+
+    # В exclude-режиме bypass-routing.sh добавляет исключения (→ прямой uplink)
+    if [[ "$BYPASS_ENABLED" == "yes" && "$BYPASS_MODE" == "exclude" ]]; then
+        if [[ -f "$BYPASS_SH" ]]; then
+            bash "$BYPASS_SH" on exclude "$vpn_iface" "$uplink"
+        fi
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -232,6 +257,11 @@ restore_direct() {
     fi
 
     ok "FORWARD rules restored: direct $uplink"
+
+    # Снять bypass routing (ipset marks, policy rules, dnsmasq bypass.conf)
+    if [[ "$BYPASS_ENABLED" == "yes" && -f "$BYPASS_SH" ]]; then
+        bash "$BYPASS_SH" off 2>/dev/null || true
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -435,6 +465,11 @@ vless_off() {
     iptables -t nat -A POSTROUTING -o "$uplink" -j MASQUERADE
     ok "MASQUERADE restored: $uplink"
 
+    # Снять bypass routing (не вызывает restore_direct, поэтому отдельно)
+    if [[ "$BYPASS_ENABLED" == "yes" && -f "$BYPASS_SH" ]]; then
+        bash "$BYPASS_SH" off 2>/dev/null || true
+    fi
+
     mkdir -p "$RUNTIME_DIR"
     echo "direct" > "$MODE_FILE"
     echo ""
@@ -567,12 +602,36 @@ vpn_status() {
         info "$line"
     done
 
+    # --- Bypass routing ---
+    echo ""
+    echo "  [ Bypass routing ]"
+    if [[ "$BYPASS_ENABLED" == "yes" ]]; then
+        local bypass_mode_file="$RUNTIME_DIR/bypass_mode"
+        if [[ -f "$bypass_mode_file" ]]; then
+            local bmode; bmode=$(cat "$bypass_mode_file")
+            ok "Bypass routing: ACTIVE (mode=$bmode)"
+        else
+            info "Bypass routing: ENABLED in config but not active (VPN is off)"
+        fi
+        local ip_cnt=0 net_cnt=0
+        if command -v ipset &>/dev/null; then
+            ip_cnt=$(ipset list ltemod_bypass_ip 2>/dev/null | grep -c '^[0-9]' || echo 0)
+            net_cnt=$(ipset list ltemod_bypass_net 2>/dev/null | grep -c '^[0-9\.]' || echo 0)
+        fi
+        info "  ipsets: ltemod_bypass_ip=${ip_cnt}, ltemod_bypass_net=${net_cnt}"
+        info "  To update lists: sudo list-manager update"
+    else
+        info "Bypass routing: disabled (BYPASS_ENABLED=no)"
+    fi
+
     echo ""
     echo "  [ Commands ]"
     info "vpn-toggle wg on|off        — WireGuard"
     info "vpn-toggle amnezia on|off   — AmneziaWG (обфускация)"
     info "vpn-toggle vless on|off     — VLESS (sing-box)"
     info "vpn-toggle status           — этот экран"
+    info "bypass-routing status       — состояние bypass routing"
+    info "list-manager update         — скачать и загрузить списки"
     echo "=========================================="
 }
 

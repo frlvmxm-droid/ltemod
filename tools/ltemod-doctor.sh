@@ -37,6 +37,11 @@ VPN_PROTO="${VPN_PROTO:-none}"
 WG_CONFIG="${WG_CONFIG:-/etc/wireguard/wg0.conf}"
 AMNEZIA_CONFIG="${AMNEZIA_CONFIG:-/etc/amnezia/amneziawg/awg0.conf}"
 VLESS_CONFIG="${VLESS_CONFIG:-/etc/sing-box/config.json}"
+BYPASS_ENABLED="${BYPASS_ENABLED:-no}"
+BYPASS_MODE="${BYPASS_MODE:-selective}"
+BYPASS_TABLE="${BYPASS_TABLE:-100}"
+BYPASS_FWMARK="${BYPASS_FWMARK:-0x64}"
+BYPASS_LIST_PRESET="${BYPASS_LIST_PRESET:-russia-inside}"
 
 GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 
@@ -212,6 +217,7 @@ need_bin wg-quick optional
 need_bin awg-quick optional
 need_bin sing-box optional
 need_bin mmcli optional
+[[ "$BYPASS_ENABLED" == "yes" ]] && need_bin ipset || need_bin ipset optional
 
 # ---------------------------------------------------------------------------
 # 5. Конфликтующие службы
@@ -249,7 +255,68 @@ case "$VPN_PROTO" in
 esac
 
 # ---------------------------------------------------------------------------
-# 7. IP forwarding
+# 7. Bypass routing
+# ---------------------------------------------------------------------------
+section "Bypass routing (selective / exclude)"
+if [[ "$BYPASS_ENABLED" == "yes" ]]; then
+    # ipset must be available
+    if command -v ipset &>/dev/null; then
+        ok "ipset available"
+    else
+        fail "ipset not installed — required for bypass routing (sudo apt install ipset)"
+    fi
+
+    # BYPASS_MODE must be valid
+    if [[ "$BYPASS_MODE" == "selective" || "$BYPASS_MODE" == "exclude" ]]; then
+        ok "BYPASS_MODE=$BYPASS_MODE"
+    else
+        fail "BYPASS_MODE='$BYPASS_MODE' invalid — use: selective | exclude"
+    fi
+
+    # BYPASS_TABLE must be a positive integer
+    if [[ "$BYPASS_TABLE" =~ ^[0-9]+$ ]] && (( BYPASS_TABLE >= 1 && BYPASS_TABLE <= 252 )); then
+        ok "BYPASS_TABLE=$BYPASS_TABLE (valid routing table)"
+    else
+        fail "BYPASS_TABLE='$BYPASS_TABLE' must be integer 1..252"
+    fi
+
+    # BYPASS_FWMARK must be valid hex or decimal
+    if [[ "$BYPASS_FWMARK" =~ ^0x[0-9a-fA-F]+$ || "$BYPASS_FWMARK" =~ ^[0-9]+$ ]]; then
+        ok "BYPASS_FWMARK=$BYPASS_FWMARK"
+    else
+        fail "BYPASS_FWMARK='$BYPASS_FWMARK' must be hex (0x64) or decimal"
+    fi
+
+    # Warn if fwmark conflicts with existing ip rules
+    if ip rule show 2>/dev/null | grep -q "fwmark $BYPASS_FWMARK" && \
+       ! ip rule show 2>/dev/null | grep -q "fwmark $BYPASS_FWMARK.*table $BYPASS_TABLE"; then
+        warn "fwmark $BYPASS_FWMARK already used in ip rules — possible conflict"
+    fi
+
+    # Warn if no lists downloaded yet
+    BYPASS_LIST_DIR="/etc/ltemod/bypass"
+    local_lists=$(find "$BYPASS_LIST_DIR" -maxdepth 1 \( -name '*.lst' -o -name '*.conf' -o -name '*.custom' \) 2>/dev/null | wc -l)
+    if (( local_lists > 0 )); then
+        ok "Bypass lists: ${local_lists} file(s) in $BYPASS_LIST_DIR"
+    else
+        warn "No bypass lists found in $BYPASS_LIST_DIR — run: sudo list-manager update"
+    fi
+
+    # Warn if dnsmasq is not running (bypass dns-ipset won't work)
+    if ! pgrep -x dnsmasq &>/dev/null; then
+        warn "dnsmasq is not running — DNS-based bypass (ipset auto-populate) won't work"
+    fi
+
+    # In selective mode VPN must be configured
+    if [[ "$BYPASS_MODE" == "selective" && "$VPN_PROTO" == "none" ]]; then
+        warn "BYPASS_MODE=selective but VPN_PROTO=none — no VPN tunnel to route bypass traffic through"
+    fi
+else
+    ok "Bypass routing disabled (BYPASS_ENABLED=no)"
+fi
+
+# ---------------------------------------------------------------------------
+# 8. IP forwarding
 # ---------------------------------------------------------------------------
 section "Routing prerequisites"
 fwd=$(cat /proc/sys/net/ipv4/ip_forward 2>/dev/null || echo 0)

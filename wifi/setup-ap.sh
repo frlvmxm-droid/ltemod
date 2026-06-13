@@ -23,6 +23,7 @@ BRIDGE_LAN_ENABLED="${BRIDGE_LAN_ENABLED:-no}"
 BRIDGE_IFACE="${BRIDGE_IFACE:-br0}"
 LAN_IFACE="${LAN_IFACE:-end0}"
 LOG_TAG="${LOG_TAG:-ltemod}"
+BYPASS_ENABLED="${BYPASS_ENABLED:-no}"
 
 TEMPLATE_DIR="/etc/ltemod/wifi"
 HOSTAPD_CONF_2G="/etc/hostapd/hostapd-2g.conf"
@@ -176,6 +177,12 @@ setup_dnsmasq() {
         echo "server=1.1.1.1"
         echo "server=8.8.8.8"
         echo "bind-interfaces"
+        # Bypass routing: подключить каталог с ipset-правилами для доменов
+        # bypass.conf генерируется list-manager.sh при загрузке списков
+        if [[ "$BYPASS_ENABLED" == "yes" ]]; then
+            mkdir -p /etc/dnsmasq.d/bypass
+            echo "conf-dir=/etc/dnsmasq.d/bypass,*.conf"
+        fi
     } > "$DNSMASQ_CONF"
 
     log "Generated dnsmasq config: $DNSMASQ_CONF (interfaces: $listen_ifaces)"

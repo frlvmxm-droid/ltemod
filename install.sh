@@ -84,7 +84,10 @@ PACKAGES=(
     usbutils
     jq
     curl
+    wget
     vnstat
+    # Bypass routing
+    ipset
 )
 
 export DEBIAN_FRONTEND=noninteractive
@@ -195,10 +198,13 @@ mkdir -p "$INSTALL_CONF"
 mkdir -p "$INSTALL_CONF/wifi"
 mkdir -p "$INSTALL_CONF/profiles"
 chmod 700 "$INSTALL_CONF/profiles"
+mkdir -p "$INSTALL_CONF/bypass"
+chmod 700 "$INSTALL_CONF/bypass"
 mkdir -p /etc/wireguard
 chmod 700 /etc/wireguard
 mkdir -p /etc/hostapd
 mkdir -p /etc/dnsmasq.d
+mkdir -p /etc/dnsmasq.d/bypass
 
 ok "Directories created"
 
@@ -214,9 +220,11 @@ install -m 755 "$SCRIPT_DIR/modem/data-usage.sh"      "$INSTALL_BIN/data-usage.s
 install -m 755 "$SCRIPT_DIR/modem/sms.sh"             "$INSTALL_BIN/sms.sh"
 
 # Network
-install -m 755 "$SCRIPT_DIR/network/setup-routing.sh" "$INSTALL_BIN/setup-routing.sh"
-install -m 755 "$SCRIPT_DIR/network/vpn-toggle.sh"    "$INSTALL_BIN/vpn-toggle.sh"
-install -m 755 "$SCRIPT_DIR/network/killswitch.sh"    "$INSTALL_BIN/killswitch.sh"
+install -m 755 "$SCRIPT_DIR/network/setup-routing.sh"        "$INSTALL_BIN/setup-routing.sh"
+install -m 755 "$SCRIPT_DIR/network/vpn-toggle.sh"            "$INSTALL_BIN/vpn-toggle.sh"
+install -m 755 "$SCRIPT_DIR/network/killswitch.sh"            "$INSTALL_BIN/killswitch.sh"
+install -m 755 "$SCRIPT_DIR/network/bypass-routing.sh"        "$INSTALL_BIN/bypass-routing.sh"
+install -m 755 "$SCRIPT_DIR/network/lists/list-manager.sh"    "$INSTALL_BIN/list-manager.sh"
 
 # VPN
 install -m 755 "$SCRIPT_DIR/vpn/setup-vpn.sh"         "$INSTALL_BIN/setup-vpn.sh"
@@ -240,7 +248,7 @@ ok "Scripts installed to $INSTALL_BIN"
 # Симлинки
 for cmd in vpn-toggle modem-status setup-vpn setup-amnezia setup-vless setup-ap \
            setup-wifi-client detect-hardware ltemod-doctor vpn-profile killswitch \
-           data-usage sms; do
+           data-usage sms bypass-routing list-manager; do
     target="/usr/local/bin/${cmd}"
     ln -sf "$INSTALL_BIN/${cmd}.sh" "$target" 2>/dev/null || \
     ln -sf "$INSTALL_BIN/${cmd}"    "$target" 2>/dev/null || true
@@ -299,10 +307,12 @@ ok "IP forwarding enabled"
 
 header "Installing systemd services"
 
-install -m 644 "$SCRIPT_DIR/systemd/lte-modem.service"    "$INSTALL_SYSTEMD/lte-modem.service"
-install -m 644 "$SCRIPT_DIR/systemd/lte-watchdog.service" "$INSTALL_SYSTEMD/lte-watchdog.service"
-install -m 644 "$SCRIPT_DIR/systemd/lte-watchdog.timer"   "$INSTALL_SYSTEMD/lte-watchdog.timer"
-install -m 644 "$SCRIPT_DIR/systemd/wifi-ap.service"      "$INSTALL_SYSTEMD/wifi-ap.service"
+install -m 644 "$SCRIPT_DIR/systemd/lte-modem.service"             "$INSTALL_SYSTEMD/lte-modem.service"
+install -m 644 "$SCRIPT_DIR/systemd/lte-watchdog.service"          "$INSTALL_SYSTEMD/lte-watchdog.service"
+install -m 644 "$SCRIPT_DIR/systemd/lte-watchdog.timer"            "$INSTALL_SYSTEMD/lte-watchdog.timer"
+install -m 644 "$SCRIPT_DIR/systemd/wifi-ap.service"               "$INSTALL_SYSTEMD/wifi-ap.service"
+install -m 644 "$SCRIPT_DIR/systemd/ltemod-bypass-update.service"  "$INSTALL_SYSTEMD/ltemod-bypass-update.service"
+install -m 644 "$SCRIPT_DIR/systemd/ltemod-bypass-update.timer"    "$INSTALL_SYSTEMD/ltemod-bypass-update.timer"
 ok "Systemd units installed"
 
 systemctl daemon-reload
@@ -310,6 +320,9 @@ ok "systemd daemon reloaded"
 
 systemctl enable lte-watchdog.timer
 ok "lte-watchdog.timer enabled"
+
+systemctl enable ltemod-bypass-update.timer
+ok "ltemod-bypass-update.timer enabled (daily at 04:00)"
 
 systemctl enable lte-modem.service
 ok "lte-modem.service enabled"
@@ -412,6 +425,15 @@ echo "     # Kill-switch (анти-leak): VPN_KILLSWITCH=yes в ltemod.conf"
 echo "     sudo data-usage                           # трафик LTE (день/месяц)"
 echo "     sudo sms balance                          # баланс через USSD"
 echo "     sudo ltemod-uninstall                     # удалить ltemod"
+echo ""
+echo -e "  ${YELLOW}8. Обход блокировок (bypass routing):${NC}"
+echo "     # Включить: BYPASS_ENABLED=yes в ltemod.conf"
+echo "     # Режим: BYPASS_MODE=selective (блокированные → VPN, остальное → прямой)"
+echo "     #         BYPASS_MODE=exclude  (VPN для всего, кроме российских сервисов)"
+echo "     sudo list-manager update              # скачать списки РКН-блокировок"
+echo "     sudo list-manager status              # статус: файлы + ipset счётчики"
+echo "     sudo bypass-routing status            # активные правила маршрутизации"
+echo "     # Списки обновляются автоматически каждый день в 04:00"
 echo ""
 info "Logs: journalctl -u lte-modem -f"
 info "Logs: journalctl -u wifi-ap -f"

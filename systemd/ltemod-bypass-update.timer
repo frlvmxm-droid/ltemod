@@ -1,0 +1,14 @@
+[Unit]
+Description=ltemod bypass lists daily update
+Documentation=https://github.com/ltemod
+After=network-online.target
+
+[Timer]
+OnBootSec=5min
+OnCalendar=*-*-* 04:00:00
+RandomizedDelaySec=30min
+Persistent=true
+Unit=ltemod-bypass-update.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,13 @@
+[Unit]
+Description=ltemod bypass lists update
+Documentation=https://github.com/ltemod
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/ltemod/ltemod.conf
+ExecStart=/usr/local/bin/ltemod/list-manager.sh update
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ltemod-bypass-update

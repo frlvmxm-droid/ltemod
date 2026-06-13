@@ -13,6 +13,10 @@ LTE + WiFi роутер на **Orange Pi 3 LTS** (Armbian) с поддержко
 | **WireGuard** | VPN туннель |
 | **AmneziaWG** | Обфусцированный WireGuard (обход DPI) |
 | **VLESS** | XTLS-Reality через sing-box |
+| **Профили VPN** | Несколько именованных конфигов, переключение одной командой |
+| **Kill-switch** | Блокировка трафика при падении VPN + защита от DNS-leak |
+| **Учёт трафика** | Расход данных LTE по дням/месяцам (vnstat) |
+| **SMS / USSD** | Баланс и SMS оператора через модем |
 | **Watchdog** | Автоматическое переподключение LTE (и VPN) |
 | **Автодетект** | Определение LAN/WiFi/WWAN интерфейсов под конкретное устройство |
 | **Doctor** | Диагностика конфига и окружения до запуска (ловит ошибки заранее) |
@@ -145,6 +149,54 @@ sudo vpn-toggle off
 vpn-toggle status
 ```
 
+### Профили VPN (несколько конфигов)
+
+Храните много конфигов и переключайтесь между ними одной командой. Протокол
+определяется автоматически по содержимому файла.
+
+```bash
+sudo vpn-profile add home /tmp/wg0.conf        # добавить (автодетект wg/amnezia/vless)
+sudo vpn-profile add germany /tmp/vless.json   # ещё один профиль
+sudo vpn-profile list                          # список (активный помечен)
+sudo vpn-profile use germany                   # активировать + поднять VPN
+sudo vpn-profile current                       # какой профиль активен
+sudo vpn-profile show home                     # показать конфиг
+sudo vpn-profile rm home                       # удалить
+```
+
+Профили хранятся в `/etc/ltemod/profiles/<name>/` (права 600).
+
+### Kill-switch и защита от утечек
+
+Чтобы при падении VPN трафик клиентов **не уходил в обход** туннеля, включите
+kill-switch в `/etc/ltemod/ltemod.conf`:
+
+```bash
+VPN_KILLSWITCH="yes"      # блокировать выход клиентов мимо VPN
+VPN_DNS_REDIRECT="yes"    # перехват DNS клиентов на роутер (анти DNS-leak)
+```
+
+При активном VPN весь клиентский трафик форвардится только через VPN-интерфейс;
+если туннель падает — пакеты отбрасываются (DROP), утечки нет. DNS-запросы
+клиентов перенаправляются на роутер (dnsmasq → туннель).
+
+```bash
+sudo killswitch status    # проверить состояние защиты
+```
+
+### LTE: расход трафика и баланс
+
+```bash
+sudo data-usage           # сводка: получено/отправлено (день/месяц)
+sudo data-usage live      # трафик в реальном времени
+sudo data-usage month     # помесячно
+
+sudo sms balance          # баланс через USSD (USSD_BALANCE_CODE в конфиге)
+sudo sms ussd '*100#'     # произвольный USSD-запрос
+sudo sms list             # входящие SMS
+sudo sms send +7900... "текст"
+```
+
 ### WiFi upstream клиент
 
 ```bash
@@ -229,25 +281,42 @@ diff /etc/ltemod/ltemod.conf /etc/ltemod/ltemod.conf.new
 
 ---
 
+## Удаление
+
+```bash
+sudo ltemod-uninstall            # удалить скрипты и сервисы, СОХРАНИТЬ конфиги
+sudo ltemod-uninstall --purge    # удалить всё, включая /etc/ltemod (профили, пароли)
+```
+
+Установленные пакеты (hostapd, dnsmasq, sing-box) и VPN-секреты в
+`/etc/wireguard`, `/etc/amnezia`, `/etc/sing-box` не удаляются.
+
+---
+
 ## Структура проекта
 
 ```
 ltemod/
 ├── install.sh                  # установщик
+├── uninstall.sh                # деинсталлятор (--purge для полного удаления)
 ├── config/
 │   └── ltemod.conf             # центральный конфиг (шаблон)
 ├── modem/
 │   ├── connect-modem.sh        # подключение LTE
 │   ├── modem-status.sh         # статус всей системы
-│   ├── modem-watchdog.sh       # watchdog переподключения
+│   ├── modem-watchdog.sh       # watchdog переподключения (LTE + VPN)
+│   ├── data-usage.sh           # учёт трафика LTE (vnstat)
+│   ├── sms.sh                  # SMS и USSD (баланс) через mmcli
 │   └── 99-em7565.rules         # udev правила для EM7565
 ├── network/
 │   ├── setup-routing.sh        # настройка маршрутизации и NAT
-│   └── vpn-toggle.sh           # переключение VPN протоколов
+│   ├── vpn-toggle.sh           # переключение VPN протоколов
+│   └── killswitch.sh           # kill-switch + защита от DNS-leak
 ├── vpn/
 │   ├── setup-vpn.sh            # установка WireGuard конфига
 │   ├── setup-amnezia.sh        # установка AmneziaWG конфига
 │   ├── setup-vless.sh          # установка VLESS конфига
+│   ├── vpn-profile.sh          # менеджер именованных VPN-профилей
 │   ├── wg0.conf.template       # шаблон WireGuard
 │   ├── amnezia-wg.conf.template # шаблон AmneziaWG
 │   └── vless.json.template     # шаблон sing-box VLESS

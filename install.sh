@@ -84,6 +84,7 @@ PACKAGES=(
     usbutils
     jq
     curl
+    vnstat
 )
 
 export DEBIAN_FRONTEND=noninteractive
@@ -192,6 +193,8 @@ header "Creating directories"
 mkdir -p "$INSTALL_BIN"
 mkdir -p "$INSTALL_CONF"
 mkdir -p "$INSTALL_CONF/wifi"
+mkdir -p "$INSTALL_CONF/profiles"
+chmod 700 "$INSTALL_CONF/profiles"
 mkdir -p /etc/wireguard
 chmod 700 /etc/wireguard
 mkdir -p /etc/hostapd
@@ -207,15 +210,19 @@ header "Installing scripts"
 install -m 755 "$SCRIPT_DIR/modem/connect-modem.sh"   "$INSTALL_BIN/connect-modem.sh"
 install -m 755 "$SCRIPT_DIR/modem/modem-status.sh"    "$INSTALL_BIN/modem-status.sh"
 install -m 755 "$SCRIPT_DIR/modem/modem-watchdog.sh"  "$INSTALL_BIN/modem-watchdog.sh"
+install -m 755 "$SCRIPT_DIR/modem/data-usage.sh"      "$INSTALL_BIN/data-usage.sh"
+install -m 755 "$SCRIPT_DIR/modem/sms.sh"             "$INSTALL_BIN/sms.sh"
 
 # Network
 install -m 755 "$SCRIPT_DIR/network/setup-routing.sh" "$INSTALL_BIN/setup-routing.sh"
 install -m 755 "$SCRIPT_DIR/network/vpn-toggle.sh"    "$INSTALL_BIN/vpn-toggle.sh"
+install -m 755 "$SCRIPT_DIR/network/killswitch.sh"    "$INSTALL_BIN/killswitch.sh"
 
 # VPN
 install -m 755 "$SCRIPT_DIR/vpn/setup-vpn.sh"         "$INSTALL_BIN/setup-vpn.sh"
 install -m 755 "$SCRIPT_DIR/vpn/setup-amnezia.sh"     "$INSTALL_BIN/setup-amnezia.sh"
 install -m 755 "$SCRIPT_DIR/vpn/setup-vless.sh"       "$INSTALL_BIN/setup-vless.sh"
+install -m 755 "$SCRIPT_DIR/vpn/vpn-profile.sh"       "$INSTALL_BIN/vpn-profile.sh"
 
 # WiFi
 install -m 755 "$SCRIPT_DIR/wifi/setup-ap.sh"             "$INSTALL_BIN/setup-ap.sh"
@@ -225,14 +232,20 @@ install -m 755 "$SCRIPT_DIR/wifi/setup-wifi-client.sh"    "$INSTALL_BIN/setup-wi
 install -m 755 "$SCRIPT_DIR/tools/detect-hardware.sh"     "$INSTALL_BIN/detect-hardware.sh"
 install -m 755 "$SCRIPT_DIR/tools/ltemod-doctor.sh"       "$INSTALL_BIN/ltemod-doctor.sh"
 
+# Uninstaller (self-contained)
+install -m 755 "$SCRIPT_DIR/uninstall.sh"                 "$INSTALL_BIN/uninstall.sh"
+
 ok "Scripts installed to $INSTALL_BIN"
 
 # Симлинки
-for cmd in vpn-toggle modem-status setup-vpn setup-amnezia setup-vless setup-ap setup-wifi-client detect-hardware ltemod-doctor; do
+for cmd in vpn-toggle modem-status setup-vpn setup-amnezia setup-vless setup-ap \
+           setup-wifi-client detect-hardware ltemod-doctor vpn-profile killswitch \
+           data-usage sms; do
     target="/usr/local/bin/${cmd}"
     ln -sf "$INSTALL_BIN/${cmd}.sh" "$target" 2>/dev/null || \
     ln -sf "$INSTALL_BIN/${cmd}"    "$target" 2>/dev/null || true
 done
+ln -sf "$INSTALL_BIN/uninstall.sh" "/usr/local/bin/ltemod-uninstall" 2>/dev/null || true
 ok "Symlinks created in /usr/local/bin/"
 
 # ===== Шаблоны конфигов =====
@@ -390,6 +403,15 @@ echo "     sudo setup-wifi-client connect"
 echo ""
 echo -e "  ${YELLOW}6. Проверить статус:${NC}"
 echo "     sudo modem-status"
+echo ""
+echo -e "  ${YELLOW}7. Профили VPN, защита и модем:${NC}"
+echo "     sudo vpn-profile add work /tmp/wg0.conf   # сохранить профиль (автодетект)"
+echo "     sudo vpn-profile list                     # список профилей"
+echo "     sudo vpn-profile use work                 # активировать + поднять VPN"
+echo "     # Kill-switch (анти-leak): VPN_KILLSWITCH=yes в ltemod.conf"
+echo "     sudo data-usage                           # трафик LTE (день/месяц)"
+echo "     sudo sms balance                          # баланс через USSD"
+echo "     sudo ltemod-uninstall                     # удалить ltemod"
 echo ""
 info "Logs: journalctl -u lte-modem -f"
 info "Logs: journalctl -u wifi-ap -f"

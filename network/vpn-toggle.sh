@@ -23,6 +23,7 @@ WWAN_IFACE="${WWAN_IFACE:-wwan0}"
 LAN_IFACE="${LAN_IFACE:-end0}"
 WIFI_AP_IFACE="${WIFI_AP_IFACE:-wlan0}"
 WIFI_AP_ENABLED="${WIFI_AP_ENABLED:-yes}"
+VPN_KILLSWITCH="${VPN_KILLSWITCH:-no}"
 VPN_IFACE="${VPN_IFACE:-wg0}"
 WG_CONFIG="${WG_CONFIG:-/etc/wireguard/wg0.conf}"
 AMNEZIA_IFACE="${AMNEZIA_IFACE:-awg0}"
@@ -46,6 +47,26 @@ fail()    { echo -e "  ${RED}✗${NC} $*"; }
 info()    { echo -e "  ${YELLOW}→${NC} $*"; }
 
 get_mode() { [[ -f "$MODE_FILE" ]] && cat "$MODE_FILE" || echo "direct"; }
+
+# Путь к kill-switch скрипту (симлинк или рядом)
+KILLSWITCH_SH="/usr/local/bin/killswitch"
+[[ -f "$KILLSWITCH_SH" ]] || KILLSWITCH_SH="$(dirname "$0")/killswitch.sh"
+
+# Включить kill-switch (если VPN_KILLSWITCH=yes): блокировать трафик клиентов
+# мимо VPN-интерфейса + перехват DNS.
+killswitch_enable() {
+    local vpn_iface="$1"
+    [[ "$VPN_KILLSWITCH" == "yes" ]] || return 0
+    [[ -f "$KILLSWITCH_SH" ]] || { info "killswitch.sh not found — skipping"; return 0; }
+    local uplink; uplink=$(get_uplink_iface)
+    bash "$KILLSWITCH_SH" on "$vpn_iface" "$uplink" && ok "Kill-switch enabled ($vpn_iface)" || true
+}
+
+# Выключить kill-switch (всегда безопасно вызывать)
+killswitch_disable() {
+    [[ -f "$KILLSWITCH_SH" ]] || return 0
+    bash "$KILLSWITCH_SH" off &>/dev/null || true
+}
 
 # Получить текущий uplink интерфейс
 get_uplink_iface() {
@@ -142,6 +163,9 @@ setup_vpn_iptables() {
     fi
 
     ok "FORWARD rules: LAN+WiFi → $vpn_iface"
+
+    # Kill-switch: запретить любой выход клиентов мимо VPN
+    killswitch_enable "$vpn_iface"
 }
 
 # ---------------------------------------------------------------------------
@@ -151,6 +175,9 @@ restore_direct() {
     local vpn_iface="$1"
     local uplink
     uplink=$(get_uplink_iface)
+
+    # Снять kill-switch ДО восстановления прямого форвардинга (убрать DROP/DNS)
+    killswitch_disable
 
     # Убрать default route через VPN
     ip route del default dev "$vpn_iface" metric 100 2>/dev/null || true
@@ -380,6 +407,9 @@ vless_on() {
     fi
     ok "MASQUERADE: $VLESS_TUN_IFACE"
 
+    # Kill-switch: блокировать трафик клиентов мимо TUN
+    killswitch_enable "$VLESS_TUN_IFACE"
+
     mkdir -p "$RUNTIME_DIR"
     echo "vless" > "$MODE_FILE"
     echo ""
@@ -393,6 +423,8 @@ vless_off() {
 
     local uplink
     uplink=$(get_uplink_iface)
+
+    killswitch_disable
 
     systemctl stop sing-box 2>/dev/null || true
     ok "sing-box service stopped"

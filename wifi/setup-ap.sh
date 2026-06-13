@@ -169,7 +169,9 @@ setup_dnsmasq() {
         done
         echo "dhcp-range=$WIFI_AP_DHCP_RANGE"
         echo "dhcp-option=3,$WIFI_AP_IP"           # шлюз
-        echo "dhcp-option=6,1.1.1.1,8.8.8.8"      # DNS
+        # DNS клиентам = сам роутер (dnsmasq). Upstream-запросы dnsmasq уходят
+        # через активный маршрут (включая VPN) — защита от DNS-leak.
+        echo "dhcp-option=6,$WIFI_AP_IP"           # DNS = роутер
         echo "no-resolv"
         echo "server=1.1.1.1"
         echo "server=8.8.8.8"

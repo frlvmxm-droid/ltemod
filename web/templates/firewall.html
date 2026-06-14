@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}Firewall — ltemod{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+  <!-- Port forwarding rules -->
+  <div class="card">
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <h2 class="text-lg font-semibold text-white">Проброс портов</h2>
+        <p class="text-slate-400 text-sm mt-0.5">
+          Перенаправляет входящие соединения с WAN-порта на устройство в локальной сети.
+        </p>
+      </div>
+    </div>
+
+    {% if rules %}
+    <div class="overflow-x-auto mb-6">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-left text-slate-400 border-b border-slate-700">
+            <th class="pb-2 pr-4">Имя</th>
+            <th class="pb-2 pr-4">Протокол</th>
+            <th class="pb-2 pr-4">Внешний порт</th>
+            <th class="pb-2 pr-4">Внутренний адрес</th>
+            <th class="pb-2 pr-4">Внутренний порт</th>
+            <th class="pb-2"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-700/50" id="pf-tbody">
+          {% for r in rules %}
+          <tr id="row-{{ r.name }}">
+            <td class="py-2 pr-4 font-medium text-white">{{ r.name }}</td>
+            <td class="py-2 pr-4">
+              <span class="badge-{{ 'up' if r.proto == 'tcp' else ('warn' if r.proto == 'both' else 'down') }}">
+                {{ r.proto.upper() }}
+              </span>
+            </td>
+            <td class="py-2 pr-4 font-mono text-yellow-300">{{ r.ext_port }}</td>
+            <td class="py-2 pr-4 font-mono text-blue-300">{{ r.int_ip }}</td>
+            <td class="py-2 pr-4 font-mono text-blue-300">{{ r.int_port }}</td>
+            <td class="py-2">
+              <button onclick="delRule('{{ r.name }}')"
+                      class="text-xs text-red-400 hover:text-red-300">Удалить</button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-slate-500 text-sm mb-6">Правила проброса портов не настроены.</p>
+    {% endif %}
+
+    <!-- Add rule form -->
+    <div class="border border-slate-700 rounded-lg p-4 bg-slate-900/40">
+      <h3 class="text-sm font-medium text-slate-300 mb-3">Добавить правило</h3>
+      <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <div>
+          <label class="label">Имя</label>
+          <input id="pf-name" type="text" placeholder="web" class="input-field text-xs">
+        </div>
+        <div>
+          <label class="label">Протокол</label>
+          <select id="pf-proto" class="input-field text-xs">
+            <option value="tcp">TCP</option>
+            <option value="udp">UDP</option>
+            <option value="both">TCP+UDP</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">Внешний порт</label>
+          <input id="pf-ext" type="number" min="1" max="65535" placeholder="80" class="input-field text-xs">
+        </div>
+        <div>
+          <label class="label">Внутренний IP</label>
+          <input id="pf-intip" type="text" placeholder="192.168.10.100" class="input-field text-xs font-mono">
+        </div>
+        <div>
+          <label class="label">Внутренний порт</label>
+          <input id="pf-intport" type="number" min="1" max="65535" placeholder="80" class="input-field text-xs">
+        </div>
+      </div>
+      <div class="mt-3 flex items-center gap-3">
+        <button onclick="addRule()" class="btn-primary">Добавить правило</button>
+        <span id="pf-result" class="text-xs text-slate-400"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Info box -->
+  <div class="card border-slate-600">
+    <h3 class="text-sm font-medium text-slate-300 mb-2">Как это работает</h3>
+    <ul class="text-sm text-slate-400 space-y-1 list-disc list-inside">
+      <li>Правила применяются через iptables DNAT (NAT Prerouting).</li>
+      <li>Внешний порт — порт на WAN-интерфейсе (LTE/Ethernet), который будет слушаться снаружи.</li>
+      <li>Внутренний IP/порт — устройство в локальной сети (192.168.10.x) и его порт.</li>
+      <li>Правила сохраняются в <code class="text-slate-300">/etc/ltemod/port-forward.conf</code> и применяются при старте.</li>
+    </ul>
+  </div>
+
+</div>
+
+<script>
+async function addRule() {
+  const name    = document.getElementById('pf-name').value.trim();
+  const proto   = document.getElementById('pf-proto').value;
+  const extPort = document.getElementById('pf-ext').value;
+  const intIp   = document.getElementById('pf-intip').value.trim();
+  const intPort = document.getElementById('pf-intport').value;
+  const msg = document.getElementById('pf-result');
+
+  if (!name || !extPort || !intIp || !intPort) {
+    msg.textContent = '✗ Заполни все поля';
+    return;
+  }
+  msg.textContent = 'Применяю…';
+  const r = await fetch('/api/portfwd', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({name, proto, ext_port: extPort, int_ip: intIp, int_port: intPort}),
+  });
+  const d = await r.json();
+  if (d.ok) { msg.textContent = '✓ Правило добавлено'; setTimeout(()=>location.reload(), 800); }
+  else { msg.textContent = '✗ ' + (d.error || 'Ошибка'); }
+}
+
+async function delRule(name) {
+  if (!confirm(`Удалить правило "${name}"?`)) return;
+  const r = await fetch('/api/portfwd/' + encodeURIComponent(name), {method:'DELETE'});
+  const d = await r.json();
+  if (d.ok) location.reload();
+  else alert(d.error || 'Ошибка');
+}
+</script>
+{% endblock %}

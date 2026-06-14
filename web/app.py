@@ -1,14 +1,20 @@
+import io
+import ipaddress
 import os
+import re
 import subprocess
+import tarfile
 import threading
 from pathlib import Path
 
 from flask import (Flask, render_template, request, redirect, url_for,
-                   session, flash, jsonify, abort)
+                   session, flash, jsonify, send_file)
 
 from auth import login_required, check_password, get_or_create_secret_key
 from config import read_conf, write_conf, ALLOWED_KEYS
-from status import get_full_status, get_vpn_status, get_bypass_status
+from status import (get_full_status, get_vpn_status, get_bypass_status,
+                    get_dhcp_leases, get_static_leases, get_port_forwards,
+                    get_traffic_data, get_ddns_status)
 
 SCRIPT_DIR = "/usr/local/bin/ltemod"
 CONF_FILE = "/etc/ltemod/ltemod.conf"
@@ -382,6 +388,213 @@ def api_modem_reconnect():
         capture_output=True, text=True, timeout=60,
     )
     return jsonify({"ok": result.returncode == 0})
+
+
+# ── Clients / DHCP ────────────────────────────────────────────────────────────
+
+@app.route("/clients")
+@login_required
+def clients():
+    leases = get_dhcp_leases()
+    static = get_static_leases()
+    return render_template("clients.html", leases=leases, static=static)
+
+
+@app.route("/api/clients")
+@login_required
+def api_clients():
+    return jsonify({"leases": get_dhcp_leases(), "static": get_static_leases()})
+
+
+@app.route("/api/clients/static", methods=["POST", "DELETE"])
+@login_required
+def api_clients_static():
+    data = request.get_json(force=True) or {}
+    mac = data.get("mac", "").strip().lower()
+    ip = data.get("ip", "").strip()
+    hostname = data.get("hostname", "").strip()
+
+    if not mac or not ip:
+        return jsonify({"ok": False, "error": "mac and ip required"}), 400
+    if not re.match(r'^([0-9a-f]{2}:){5}[0-9a-f]{2}$', mac):
+        return jsonify({"ok": False, "error": "invalid MAC (expect xx:xx:xx:xx:xx:xx)"}), 400
+    try:
+        ipaddress.IPv4Address(ip)
+    except ValueError:
+        return jsonify({"ok": False, "error": "invalid IP address"}), 400
+
+    static_file = Path("/etc/dnsmasq.d/ltemod-static.conf")
+    existing = static_file.read_text() if static_file.exists() else ""
+    lines = [l for l in existing.splitlines() if mac not in l.lower()]
+
+    if request.method == "POST":
+        entry = f"dhcp-host={mac},{ip}"
+        if hostname:
+            entry += f",{hostname}"
+        lines.append(entry)
+
+    static_file.write_text("\n".join(lines) + ("\n" if lines else ""))
+    subprocess.run(["systemctl", "reload-or-restart", "dnsmasq"],
+                   capture_output=True, timeout=10)
+    return jsonify({"ok": True})
+
+
+# ── Firewall / Port Forwarding ─────────────────────────────────────────────────
+
+@app.route("/firewall")
+@login_required
+def firewall():
+    return render_template("firewall.html", rules=get_port_forwards())
+
+
+@app.route("/api/portfwd", methods=["GET"])
+@login_required
+def api_portfwd_list():
+    return jsonify(get_port_forwards())
+
+
+@app.route("/api/portfwd", methods=["POST"])
+@login_required
+def api_portfwd_add():
+    data = request.get_json(force=True) or {}
+    name = re.sub(r"[^a-zA-Z0-9_-]", "_", data.get("name", "").strip())
+    proto = data.get("proto", "tcp").lower()
+    ext_port = str(data.get("ext_port", "")).strip()
+    int_ip = data.get("int_ip", "").strip()
+    int_port = str(data.get("int_port", "")).strip()
+
+    if not all([name, proto, ext_port, int_ip, int_port]):
+        return jsonify({"ok": False, "error": "all fields required"}), 400
+    if proto not in ("tcp", "udp", "both"):
+        return jsonify({"ok": False, "error": "proto must be tcp/udp/both"}), 400
+    for p in (ext_port, int_port):
+        if not p.isdigit() or not (1 <= int(p) <= 65535):
+            return jsonify({"ok": False, "error": f"invalid port: {p}"}), 400
+    try:
+        ipaddress.IPv4Address(int_ip)
+    except ValueError:
+        return jsonify({"ok": False, "error": "invalid internal IP"}), 400
+
+    pf_file = Path("/etc/ltemod/port-forward.conf")
+    existing = pf_file.read_text() if pf_file.exists() else ""
+    lines = [l for l in existing.splitlines() if l.strip() and not l.startswith(f"{name}:")]
+    lines.append(f"{name}:{proto}:{ext_port}:{int_ip}:{int_port}")
+    pf_file.write_text("\n".join(lines) + "\n")
+
+    run_script("setup-portfwd.sh", "apply", timeout=15)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/portfwd/<name>", methods=["DELETE"])
+@login_required
+def api_portfwd_del(name):
+    name = re.sub(r"[^a-zA-Z0-9_-]", "_", name)
+    pf_file = Path("/etc/ltemod/port-forward.conf")
+    if pf_file.exists():
+        lines = [l for l in pf_file.read_text().splitlines()
+                 if l.strip() and not l.startswith(f"{name}:")]
+        pf_file.write_text("\n".join(lines) + ("\n" if lines else ""))
+    run_script("setup-portfwd.sh", "apply", timeout=15)
+    return jsonify({"ok": True})
+
+
+# ── Traffic ───────────────────────────────────────────────────────────────────
+
+@app.route("/traffic")
+@login_required
+def traffic():
+    conf = read_conf()
+    return render_template("traffic.html", config=conf)
+
+
+@app.route("/api/traffic")
+@login_required
+def api_traffic():
+    conf = read_conf()
+    return jsonify(get_traffic_data(conf.get("WWAN_IFACE", "wwan0")))
+
+
+# ── Settings (DNS, DDNS, Failover, Backup) ────────────────────────────────────
+
+@app.route("/settings", methods=["GET", "POST"])
+@login_required
+def settings():
+    if request.method == "POST":
+        action = request.form.get("action", "save")
+
+        if action == "save":
+            updates = {}
+            for k in ("DNS_MODE", "DNS_SERVER", "DDNS_PROVIDER",
+                      "DDNS_DOMAIN", "DDNS_TOKEN", "DDNS_ZONE_ID", "DDNS_USERNAME"):
+                if k in request.form:
+                    updates[k] = request.form[k]
+            updates["DDNS_ENABLED"] = "yes" if request.form.get("DDNS_ENABLED") else "no"
+            updates["FAILOVER_ENABLED"] = "yes" if request.form.get("FAILOVER_ENABLED") else "no"
+            try:
+                write_conf(updates)
+                flash("Настройки сохранены", "success")
+            except Exception as e:
+                flash(f"Ошибка: {e}", "error")
+            if "DNS_MODE" in updates or "DNS_SERVER" in updates:
+                rc, _, err = run_script("setup-dns.sh", "apply", timeout=60)
+                if rc != 0:
+                    flash(f"DNS: {err or 'ошибка применения'}", "error")
+                else:
+                    flash("DNS режим применён", "info")
+
+        elif action == "ddns_update":
+            threading.Thread(
+                target=lambda: run_script("setup-ddns.sh", "force", timeout=30),
+                daemon=True,
+            ).start()
+            flash("DDNS обновление запущено", "info")
+
+        return redirect(url_for("settings"))
+
+    conf = read_conf()
+    ddns_st = get_ddns_status()
+    return render_template("settings.html", config=conf, ddns=ddns_st)
+
+
+@app.route("/api/backup")
+@login_required
+def api_backup():
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        conf_dir = Path("/etc/ltemod")
+        if conf_dir.exists():
+            for f in sorted(conf_dir.rglob("*")):
+                if f.is_file() and not f.name.endswith((".pyc", ".new")):
+                    tar.add(str(f), arcname=str(f.relative_to("/etc")))
+    buf.seek(0)
+    return send_file(buf, mimetype="application/gzip",
+                     as_attachment=True, download_name="ltemod-backup.tar.gz")
+
+
+@app.route("/api/restore", methods=["POST"])
+@login_required
+def api_restore():
+    f = request.files.get("backup")
+    if not f:
+        return jsonify({"ok": False, "error": "no file"}), 400
+    try:
+        buf = io.BytesIO(f.read())
+        with tarfile.open(fileobj=buf, mode="r:gz") as tar:
+            for member in tar.getmembers():
+                safe_name = member.name.lstrip("/")
+                if not safe_name.startswith("ltemod/") or ".." in safe_name:
+                    continue
+                member.name = safe_name
+                tar.extract(member, "/etc", filter="data")
+        return jsonify({"ok": True, "message": "Конфиг восстановлен. Перезагрузка рекомендована."})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/ddns/status")
+@login_required
+def api_ddns_status():
+    return jsonify(get_ddns_status())
 
 
 if __name__ == "__main__":

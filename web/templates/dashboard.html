@@ -2,6 +2,7 @@
 {% block title %}Dashboard — ltemod{% endblock %}
 
 {% block content %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <div class="flex items-center justify-between mb-6">
   <h1 class="text-xl font-semibold">Dashboard</h1>
   <div class="flex items-center gap-3 text-sm text-slate-400">
@@ -164,6 +165,18 @@
 <!-- Internet status banner -->
 <div id="internet-banner" class="mt-4 hidden"></div>
 
+<!-- Traffic mini-chart -->
+<div class="card mt-4">
+  <div class="flex items-center justify-between mb-3">
+    <h2 class="font-semibold text-slate-200">Трафик (7 дней)</h2>
+    <a href="/traffic" class="text-xs text-blue-400 hover:text-blue-300">Подробнее →</a>
+  </div>
+  <div id="traffic-no-data" class="hidden text-slate-500 text-xs py-2">
+    vnstat не настроен — <a href="https://humdi.net/vnstat/" class="underline">инструкция</a>
+  </div>
+  <canvas id="miniTrafficChart" height="60"></canvas>
+</div>
+
 <script>
 const POLL_MS = 8000;
 
@@ -279,7 +292,7 @@ function renderStatus(d) {
 
   // Timestamp
   const dot = document.getElementById('dot');
-  dot.className = 'w-2 h-2 rounded-full ' + (lteUp ? 'bg-green-400' : 'bg-red-400');
+  dot.className = 'w-2 h-2 rounded-full ' + (uplinkUp ? 'bg-green-400' : 'bg-red-400');
   document.getElementById('last-update').textContent = 'обновлено ' + new Date().toLocaleTimeString();
 }
 
@@ -322,7 +335,46 @@ async function reconnectModem() {
   } catch(e) {}
 }
 
+// Traffic mini-chart (load once)
+let miniChart;
+async function loadMiniTraffic() {
+  try {
+    const r = await fetch('/api/traffic');
+    const d = await r.json();
+    if (!d.available || !d.daily.length) {
+      document.getElementById('traffic-no-data').classList.remove('hidden');
+      document.getElementById('miniTrafficChart').classList.add('hidden');
+      return;
+    }
+    const labels = d.daily.map(e => e.date);
+    if (miniChart) miniChart.destroy();
+    miniChart = new Chart(document.getElementById('miniTrafficChart'), {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label:'↓ RX', data: d.daily.map(e=>e.rx), backgroundColor:'rgba(59,130,246,0.7)' },
+          { label:'↑ TX', data: d.daily.map(e=>e.tx), backgroundColor:'rgba(16,185,129,0.7)' },
+        ],
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { labels: { color:'#94a3b8', font:{size:10} } } },
+        scales: {
+          x: { ticks:{color:'#64748b',font:{size:10}}, grid:{color:'#1e293b'} },
+          y: { ticks:{color:'#64748b',font:{size:10},
+               callback: v => v>=1073741824 ? (v/1073741824).toFixed(1)+'G' :
+                               v>=1048576 ? (v/1048576).toFixed(0)+'M' :
+                               v>=1024 ? (v/1024).toFixed(0)+'K' : v+'B'
+               }, grid:{color:'#1e293b'} },
+        },
+      },
+    });
+  } catch(e) {}
+}
+
 refresh();
+loadMiniTraffic();
 setInterval(refresh, POLL_MS);
 </script>
 {% endblock %}

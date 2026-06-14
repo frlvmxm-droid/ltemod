@@ -1,0 +1,11 @@
+[Unit]
+Description=ltemod DDNS Update Timer
+Requires=ltemod-ddns.service
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Unit=ltemod-ddns.service
+
+[Install]
+WantedBy=timers.target

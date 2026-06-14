@@ -19,6 +19,13 @@ ALLOWED_KEYS = {
     "VPN_PROTO", "VPN_KILLSWITCH", "VPN_DNS_REDIRECT",
     # Bypass
     "BYPASS_ENABLED", "BYPASS_MODE", "BYPASS_LIST_PRESET",
+    # DNS
+    "DNS_MODE", "DNS_SERVER",
+    # DDNS
+    "DDNS_ENABLED", "DDNS_PROVIDER", "DDNS_DOMAIN", "DDNS_TOKEN",
+    "DDNS_ZONE_ID", "DDNS_USERNAME",
+    # WAN Failover
+    "FAILOVER_ENABLED",
 }
 
 # Matches: KEY="value" or KEY=value (no spaces in value, optional trailing comment)

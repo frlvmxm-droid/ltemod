@@ -22,6 +22,8 @@ VPN_IFACE="${VPN_IFACE:-wg0}"
 AMNEZIA_IFACE="${AMNEZIA_IFACE:-awg0}"
 VLESS_TUN_IFACE="${VLESS_TUN_IFACE:-tun0}"
 UPLINK_MODE="${UPLINK_MODE:-lte}"
+UPLINK_PRIORITY="${UPLINK_PRIORITY:-lte wifi eth}"
+FAILOVER_ENABLED="${FAILOVER_ENABLED:-yes}"
 NM_CON_NAME="${NM_CON_NAME:-lte-connection}"
 LOG_TAG="${LOG_TAG:-ltemod}"
 
@@ -239,6 +241,40 @@ reconnect_vpn() {
     fi
 }
 
+# ---------------------------------------------------------------------------
+# WAN Failover — переключение на следующий uplink из UPLINK_PRIORITY
+# ---------------------------------------------------------------------------
+try_failover() {
+    [[ "${FAILOVER_ENABLED:-yes}" != "yes" ]] && return 1
+
+    local active_mode
+    active_mode=$(cat "$RUNTIME_DIR/uplink_mode" 2>/dev/null || echo "$UPLINK_MODE")
+
+    # Build candidate list: modes from UPLINK_PRIORITY excluding current
+    local candidates=()
+    for m in $UPLINK_PRIORITY; do
+        [[ "$m" != "$active_mode" ]] && candidates+=("$m")
+    done
+    [[ ${#candidates[@]} -eq 0 ]] && { log "Failover: no other uplinks in UPLINK_PRIORITY"; return 1; }
+
+    local next_mode="${candidates[0]}"
+    log "Failover: '$active_mode' failed → trying '$next_mode'"
+
+    local uplink_script="/usr/local/bin/ltemod/setup-uplink.sh"
+    [[ ! -f "$uplink_script" ]] && uplink_script="$(dirname "$0")/../network/setup-uplink.sh"
+    if [[ ! -f "$uplink_script" ]]; then
+        log_err "Failover: setup-uplink.sh not found"
+        return 1
+    fi
+
+    if bash "$uplink_script" start "$next_mode"; then
+        log "Failover to $next_mode succeeded"
+        return 0
+    fi
+    log_err "Failover to $next_mode failed"
+    return 1
+}
+
 # ===========================================================================
 # === Главная логика ===
 # ===========================================================================
@@ -290,7 +326,7 @@ if [[ $counter -ge $MAX_RECONNECT_ATTEMPTS ]]; then
     exit 1
 fi
 
-# Попытка переподключения
+# Попытка переподключения к текущему uplink
 if reconnect_uplink; then
     sleep 5
     reconnect_vpn
@@ -300,10 +336,24 @@ if reconnect_uplink; then
         reset_counter
         exit 0
     else
-        log_err "Reconnection done but internet still unreachable"
+        log_err "Reconnection done but internet still unreachable — trying failover"
     fi
 else
     log_err "Reconnection failed (attempt $counter/$MAX_RECONNECT_ATTEMPTS)"
+fi
+
+# Если обычное переподключение не помогло — попробовать failover
+if try_failover; then
+    sleep 10
+    reconnect_vpn
+    sleep 5
+    if check_internet; then
+        log "Failover successful, connectivity restored"
+        reset_counter
+        exit 0
+    else
+        log_err "Failover done but internet still unreachable"
+    fi
 fi
 
 exit 1

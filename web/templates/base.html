@@ -34,11 +34,15 @@
           <span class="text-blue-400 font-bold text-lg">ltemod</span>
           <span class="text-slate-500 text-xs hidden sm:block">Orange Pi 3 LTS</span>
         </div>
-        <div class="flex items-center gap-1">
+        <div class="flex items-center gap-1 flex-wrap">
           <a href="/dashboard" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">Dashboard</a>
           <a href="/lte-wifi" class="nav-link {% if request.endpoint == 'lte_wifi' %}active{% endif %}">LTE + WiFi</a>
+          <a href="/clients" class="nav-link {% if request.endpoint == 'clients' %}active{% endif %}">Клиенты</a>
+          <a href="/firewall" class="nav-link {% if request.endpoint == 'firewall' %}active{% endif %}">Firewall</a>
+          <a href="/traffic" class="nav-link {% if request.endpoint == 'traffic' %}active{% endif %}">Трафик</a>
           <a href="/vpn" class="nav-link {% if request.endpoint == 'vpn' %}active{% endif %}">VPN</a>
           <a href="/bypass" class="nav-link {% if request.endpoint == 'bypass' %}active{% endif %}">Bypass</a>
+          <a href="/settings" class="nav-link {% if request.endpoint == 'settings' %}active{% endif %}">Настройки</a>
           <a href="/logout" class="nav-link text-slate-500 hover:text-red-400 ml-2">Выйти</a>
         </div>
       </div>

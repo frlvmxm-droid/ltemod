@@ -1,3 +1,4 @@
+import json
 import re
 import subprocess
 import time
@@ -200,6 +201,114 @@ def get_uplink_status(cfg: dict) -> dict:
             result["wifi_client"]["ssid"] = m.group(1).strip()
 
     return result
+
+
+def get_dhcp_leases() -> list:
+    for candidate in ("/var/lib/misc/dnsmasq.leases", "/tmp/dnsmasq.leases",
+                      "/var/lib/dnsmasq/dnsmasq.leases"):
+        lease_file = Path(candidate)
+        if not lease_file.exists():
+            continue
+        leases = []
+        for line in lease_file.read_text().splitlines():
+            parts = line.split()
+            if len(parts) < 4:
+                continue
+            expiry = int(parts[0]) if parts[0].isdigit() else 0
+            leases.append({
+                "expiry": expiry,
+                "expiry_str": time.strftime("%H:%M %d.%m", time.localtime(expiry)) if expiry else "",
+                "mac": parts[1],
+                "ip": parts[2],
+                "hostname": parts[3] if parts[3] != "*" else "",
+            })
+        leases.sort(key=lambda x: [int(o) for o in x["ip"].split(".")] if x["ip"] else [0])
+        return leases
+    return []
+
+
+def get_static_leases() -> list:
+    static_file = Path("/etc/dnsmasq.d/ltemod-static.conf")
+    if not static_file.exists():
+        return []
+    result = []
+    for line in static_file.read_text().splitlines():
+        line = line.strip()
+        if not line.startswith("dhcp-host="):
+            continue
+        parts = line[len("dhcp-host="):].split(",")
+        if len(parts) >= 2:
+            result.append({
+                "mac": parts[0],
+                "ip": parts[1] if len(parts) >= 2 else "",
+                "hostname": parts[2] if len(parts) >= 3 else "",
+            })
+    return result
+
+
+def get_port_forwards() -> list:
+    pf_file = Path("/etc/ltemod/port-forward.conf")
+    if not pf_file.exists():
+        return []
+    rules = []
+    for line in pf_file.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split(":")
+        if len(parts) == 5:
+            rules.append({
+                "name": parts[0],
+                "proto": parts[1],
+                "ext_port": parts[2],
+                "int_ip": parts[3],
+                "int_port": parts[4],
+            })
+    return rules
+
+
+def get_traffic_data(iface: str = "wwan0") -> dict:
+    result = {"available": False, "daily": [], "monthly": [], "iface": iface}
+
+    for period, key in [("d", "daily"), ("m", "monthly")]:
+        limit = "7" if period == "d" else "6"
+        out, rc = _run(["vnstat", "-i", iface, "--json", period, limit], timeout=5)
+        if rc != 0:
+            continue
+        try:
+            data = json.loads(out)
+            ifaces = data.get("interfaces", [])
+            if not ifaces:
+                continue
+            traffic = ifaces[0].get("traffic", {})
+            entries = traffic.get("day" if period == "d" else "month", [])
+            result["available"] = True
+            for entry in entries:
+                d = entry.get("date", {})
+                if period == "d":
+                    label = f"{d.get('day', 0):02d}.{d.get('month', 0):02d}"
+                else:
+                    label = f"{d.get('month', 0):02d}/{d.get('year', 0)}"
+                result[key].append({
+                    "date": label,
+                    "rx": entry.get("rx", 0),
+                    "tx": entry.get("tx", 0),
+                })
+        except (json.JSONDecodeError, KeyError, IndexError):
+            pass
+
+    return result
+
+
+def get_ddns_status() -> dict:
+    rt = Path("/run/ltemod")
+    last_ip = (rt / "ddns_last_ip").read_text().strip() if (rt / "ddns_last_ip").exists() else None
+    last_update = (rt / "ddns_last_update").read_text().strip() if (rt / "ddns_last_update").exists() else None
+    last_result = (rt / "ddns_last_result").read_text().strip() if (rt / "ddns_last_result").exists() else None
+    ts = None
+    if last_update and last_update.isdigit():
+        ts = time.strftime("%d.%m.%Y %H:%M", time.localtime(int(last_update)))
+    return {"last_ip": last_ip, "last_update_ts": ts, "last_result": last_result}
 
 
 def get_full_status(cfg: dict | None = None) -> dict:

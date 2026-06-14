@@ -206,6 +206,12 @@ mkdir -p /etc/hostapd
 mkdir -p /etc/dnsmasq.d
 mkdir -p /etc/dnsmasq.d/bypass
 
+# Файлы конфигурации (создать если не существуют)
+touch /etc/dnsmasq.d/ltemod-static.conf
+[[ -f "$INSTALL_CONF/port-forward.conf" ]] || \
+    echo "# ltemod port-forward rules: name:proto:ext_port:int_ip:int_port" \
+    > "$INSTALL_CONF/port-forward.conf"
+
 ok "Directories created"
 
 # ===== Копирование скриптов =====
@@ -222,6 +228,9 @@ install -m 755 "$SCRIPT_DIR/modem/sms.sh"             "$INSTALL_BIN/sms.sh"
 # Network
 install -m 755 "$SCRIPT_DIR/network/setup-routing.sh"        "$INSTALL_BIN/setup-routing.sh"
 install -m 755 "$SCRIPT_DIR/network/setup-uplink.sh"          "$INSTALL_BIN/setup-uplink.sh"
+install -m 755 "$SCRIPT_DIR/network/setup-portfwd.sh"         "$INSTALL_BIN/setup-portfwd.sh"
+install -m 755 "$SCRIPT_DIR/network/setup-ddns.sh"            "$INSTALL_BIN/setup-ddns.sh"
+install -m 755 "$SCRIPT_DIR/network/setup-dns.sh"             "$INSTALL_BIN/setup-dns.sh"
 install -m 755 "$SCRIPT_DIR/network/vpn-toggle.sh"            "$INSTALL_BIN/vpn-toggle.sh"
 install -m 755 "$SCRIPT_DIR/network/killswitch.sh"            "$INSTALL_BIN/killswitch.sh"
 install -m 755 "$SCRIPT_DIR/network/bypass-routing.sh"        "$INSTALL_BIN/bypass-routing.sh"
@@ -249,7 +258,8 @@ ok "Scripts installed to $INSTALL_BIN"
 
 # Симлинки
 for cmd in vpn-toggle modem-status setup-vpn setup-amnezia setup-vless setup-ap \
-           setup-wifi-client setup-uplink detect-hardware detect-sim ltemod-doctor vpn-profile \
+           setup-wifi-client setup-uplink setup-portfwd setup-ddns setup-dns \
+           detect-hardware detect-sim ltemod-doctor vpn-profile \
            killswitch data-usage sms bypass-routing list-manager; do
     target="/usr/local/bin/${cmd}"
     ln -sf "$INSTALL_BIN/${cmd}.sh" "$target" 2>/dev/null || \
@@ -318,6 +328,8 @@ install -m 644 "$SCRIPT_DIR/systemd/ltemod-bypass-update.timer"    "$INSTALL_SYS
 install -m 644 "$SCRIPT_DIR/systemd/ltemod-vpn.service"            "$INSTALL_SYSTEMD/ltemod-vpn.service"
 install -m 644 "$SCRIPT_DIR/systemd/sing-box.service"              "$INSTALL_SYSTEMD/sing-box.service"
 install -m 644 "$SCRIPT_DIR/systemd/ltemod-web.service"            "$INSTALL_SYSTEMD/ltemod-web.service"
+install -m 644 "$SCRIPT_DIR/systemd/ltemod-ddns.service"           "$INSTALL_SYSTEMD/ltemod-ddns.service"
+install -m 644 "$SCRIPT_DIR/systemd/ltemod-ddns.timer"             "$INSTALL_SYSTEMD/ltemod-ddns.timer"
 ok "Systemd units installed"
 
 systemctl daemon-reload
@@ -328,6 +340,11 @@ ok "lte-watchdog.timer enabled"
 
 systemctl enable ltemod-bypass-update.timer
 ok "ltemod-bypass-update.timer enabled (daily at 04:00)"
+
+# DDNS timer включается только если DDNS_ENABLED=yes (проверка при старте)
+# По умолчанию не включаем — чтобы не мешать при DDNS_ENABLED=no
+info "ltemod-ddns.timer: включи вручную при DDNS_ENABLED=yes"
+info "  sudo systemctl enable --now ltemod-ddns.timer"
 
 systemctl enable lte-modem.service
 ok "lte-modem.service enabled"

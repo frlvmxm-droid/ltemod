@@ -1,0 +1,12 @@
+[Unit]
+Description=ltemod DDNS Updater
+After=network-online.target lte-modem.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/ltemod/setup-ddns.sh update
+EnvironmentFile=-/etc/ltemod/ltemod.conf
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ltemod-ddns

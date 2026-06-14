@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}Трафик — ltemod{% endblock %}
+
+{% block content %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+
+<div class="space-y-6">
+
+  <!-- Daily chart -->
+  <div class="card">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-semibold text-white">Трафик за последние 7 дней</h2>
+      <span id="iface-label" class="text-xs text-slate-500"></span>
+    </div>
+    <div id="no-data" class="hidden text-slate-500 text-sm py-8 text-center">
+      Данные vnstat недоступны. Убедитесь что vnstat запущен и интерфейс настроен.
+      <div class="mt-2 text-xs text-slate-600">sudo vnstat -u -i wwan0 &amp;&amp; sudo systemctl enable --now vnstat</div>
+    </div>
+    <canvas id="dailyChart" height="120"></canvas>
+  </div>
+
+  <!-- Monthly chart -->
+  <div class="card">
+    <h2 class="text-lg font-semibold text-white mb-4">Трафик по месяцам</h2>
+    <canvas id="monthlyChart" height="120"></canvas>
+  </div>
+
+  <!-- Raw table -->
+  <div class="card">
+    <h2 class="text-lg font-semibold text-white mb-4">Детализация по дням</h2>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm" id="daily-table">
+        <thead>
+          <tr class="text-left text-slate-400 border-b border-slate-700">
+            <th class="pb-2 pr-6">Дата</th>
+            <th class="pb-2 pr-6">Получено</th>
+            <th class="pb-2 pr-6">Отправлено</th>
+            <th class="pb-2">Итого</th>
+          </tr>
+        </thead>
+        <tbody id="daily-tbody" class="divide-y divide-slate-700/50"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function fmtBytes(b) {
+  if (b === undefined || b === null) return '—';
+  const units = ['B','KB','MB','GB','TB'];
+  let v = b, i = 0;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+  return v.toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
+}
+
+const chartDefaults = {
+  responsive: true,
+  plugins: { legend: { labels: { color: '#94a3b8', font:{size:11} } } },
+  scales: {
+    x: { ticks:{color:'#64748b'}, grid:{color:'#1e293b'} },
+    y: { ticks:{color:'#64748b', callback: v=>fmtBytes(v)}, grid:{color:'#1e293b'} },
+  },
+};
+
+let dailyChart, monthlyChart;
+
+async function loadTraffic() {
+  const r = await fetch('/api/traffic');
+  const d = await r.json();
+
+  document.getElementById('iface-label').textContent = d.iface || '';
+
+  if (!d.available || (!d.daily.length && !d.monthly.length)) {
+    document.getElementById('no-data').classList.remove('hidden');
+    document.getElementById('dailyChart').classList.add('hidden');
+    document.getElementById('monthlyChart').parentElement.classList.add('hidden');
+    return;
+  }
+
+  // Daily chart
+  if (d.daily.length) {
+    const labels = d.daily.map(e=>e.date);
+    if (dailyChart) dailyChart.destroy();
+    dailyChart = new Chart(document.getElementById('dailyChart'), {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label:'Получено',   data: d.daily.map(e=>e.rx), backgroundColor:'rgba(59,130,246,0.7)' },
+          { label:'Отправлено', data: d.daily.map(e=>e.tx), backgroundColor:'rgba(16,185,129,0.7)' },
+        ],
+      },
+      options: chartDefaults,
+    });
+
+    // Table
+    const tbody = document.getElementById('daily-tbody');
+    tbody.innerHTML = '';
+    [...d.daily].reverse().forEach(e => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="py-2 pr-6 font-mono text-slate-300">${e.date}</td>
+        <td class="py-2 pr-6 text-blue-300">${fmtBytes(e.rx)}</td>
+        <td class="py-2 pr-6 text-green-300">${fmtBytes(e.tx)}</td>
+        <td class="py-2 text-slate-200">${fmtBytes(e.rx + e.tx)}</td>`;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // Monthly chart
+  if (d.monthly.length) {
+    const labels = d.monthly.map(e=>e.date);
+    if (monthlyChart) monthlyChart.destroy();
+    monthlyChart = new Chart(document.getElementById('monthlyChart'), {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label:'Получено',   data: d.monthly.map(e=>e.rx), backgroundColor:'rgba(59,130,246,0.6)' },
+          { label:'Отправлено', data: d.monthly.map(e=>e.tx), backgroundColor:'rgba(16,185,129,0.6)' },
+        ],
+      },
+      options: chartDefaults,
+    });
+  }
+}
+
+loadTraffic();
+</script>
+{% endblock %}

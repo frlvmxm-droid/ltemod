@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+{% block title %}Настройки — ltemod{% endblock %}
+
+{% block content %}
+<form method="POST">
+<input type="hidden" name="action" value="save">
+<div class="space-y-6">
+
+  <!-- DNS -->
+  <div class="card">
+    <h2 class="text-lg font-semibold text-white mb-1">DNS</h2>
+    <p class="text-slate-400 text-sm mb-4">
+      Как dnsmasq разрешает имена для клиентов сети.
+    </p>
+    <div class="space-y-3">
+      {% set dns_mode = config.get('DNS_MODE','system') %}
+      <label class="flex items-start gap-3 cursor-pointer">
+        <input type="radio" name="DNS_MODE" value="system"
+               {% if dns_mode == 'system' %}checked{% endif %}
+               class="mt-0.5 accent-blue-500" onchange="toggleDns(this.value)">
+        <div>
+          <div class="text-sm font-medium text-slate-200">Системный (по умолчанию)</div>
+          <div class="text-xs text-slate-500">DNS из NetworkManager / DHCP оператора.</div>
+        </div>
+      </label>
+      <label class="flex items-start gap-3 cursor-pointer">
+        <input type="radio" name="DNS_MODE" value="custom"
+               {% if dns_mode == 'custom' %}checked{% endif %}
+               class="mt-0.5 accent-blue-500" onchange="toggleDns(this.value)">
+        <div>
+          <div class="text-sm font-medium text-slate-200">Пользовательский DNS</div>
+          <div class="text-xs text-slate-500">Задайте DNS-серверы вручную (например, 1.1.1.1, 8.8.8.8).</div>
+        </div>
+      </label>
+      <label class="flex items-start gap-3 cursor-pointer">
+        <input type="radio" name="DNS_MODE" value="dot"
+               {% if dns_mode == 'dot' %}checked{% endif %}
+               class="mt-0.5 accent-blue-500" onchange="toggleDns(this.value)">
+        <div>
+          <div class="text-sm font-medium text-slate-200">DNS over TLS (DoT)</div>
+          <div class="text-xs text-slate-500">Зашифрованный DNS через stubby. Устанавливается автоматически.</div>
+        </div>
+      </label>
+    </div>
+    <div id="dns-server-row" class="mt-4 {% if dns_mode == 'system' %}hidden{% endif %}">
+      <label class="label">DNS-серверы <span class="text-slate-500 font-normal">(через запятую)</span></label>
+      <input type="text" name="DNS_SERVER"
+             value="{{ config.get('DNS_SERVER','1.1.1.1') }}"
+             placeholder="1.1.1.1,8.8.8.8"
+             class="input-field w-full sm:w-80 font-mono text-sm">
+      <p class="text-xs text-slate-500 mt-1">
+        DoT: <code>1.1.1.1</code> Cloudflare · <code>9.9.9.9</code> Quad9 · <code>8.8.8.8</code> Google
+      </p>
+    </div>
+  </div>
+
+  <!-- DDNS -->
+  <div class="card">
+    <h2 class="text-lg font-semibold text-white mb-1">Dynamic DNS</h2>
+    <p class="text-slate-400 text-sm mb-4">
+      Автоматически обновляет DNS-запись при смене внешнего IP.
+    </p>
+    <label class="flex items-center gap-2 mb-4 cursor-pointer">
+      <input type="checkbox" name="DDNS_ENABLED" value="yes"
+             {% if config.get('DDNS_ENABLED','no') == 'yes' %}checked{% endif %}
+             class="w-4 h-4 accent-blue-500" onchange="toggleDdns(this.checked)">
+      <span class="text-sm text-slate-200">Включить DDNS</span>
+    </label>
+
+    <div id="ddns-fields" class="{% if config.get('DDNS_ENABLED','no') != 'yes' %}hidden{% endif %} space-y-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="label">Провайдер</label>
+          <select name="DDNS_PROVIDER" class="input-field" onchange="toggleDdnsProvider(this.value)">
+            {% for p in ['cloudflare','duckdns','noip','freedns'] %}
+            <option value="{{ p }}" {% if config.get('DDNS_PROVIDER','cloudflare') == p %}selected{% endif %}>
+              {{ p.title() }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="label">Домен</label>
+          <input type="text" name="DDNS_DOMAIN"
+                 value="{{ config.get('DDNS_DOMAIN','') }}"
+                 placeholder="home.example.com"
+                 class="input-field">
+        </div>
+        <div>
+          <label class="label">API-токен / пароль</label>
+          <input type="password" name="DDNS_TOKEN"
+                 value="{{ config.get('DDNS_TOKEN','') }}"
+                 placeholder="••••••••"
+                 class="input-field">
+        </div>
+        <div id="ddns-zone-row" class="{% if config.get('DDNS_PROVIDER','cloudflare') != 'cloudflare' %}hidden{% endif %}">
+          <label class="label">Zone ID <span class="text-slate-500 font-normal">(Cloudflare)</span></label>
+          <input type="text" name="DDNS_ZONE_ID"
+                 value="{{ config.get('DDNS_ZONE_ID','') }}"
+                 placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                 class="input-field font-mono text-xs">
+        </div>
+        <div id="ddns-user-row" class="{% if config.get('DDNS_PROVIDER','cloudflare') != 'noip' %}hidden{% endif %}">
+          <label class="label">Имя пользователя <span class="text-slate-500 font-normal">(No-IP)</span></label>
+          <input type="text" name="DDNS_USERNAME"
+                 value="{{ config.get('DDNS_USERNAME','') }}"
+                 placeholder="user@example.com"
+                 class="input-field">
+        </div>
+      </div>
+
+      <!-- DDNS status -->
+      {% if ddns.last_ip %}
+      <div class="bg-slate-900/50 rounded p-3 text-sm">
+        <div class="flex gap-6 flex-wrap">
+          <span class="text-slate-400">Текущий IP: <span class="text-white font-mono">{{ ddns.last_ip }}</span></span>
+          {% if ddns.last_update_ts %}
+          <span class="text-slate-400">Обновлено: <span class="text-white">{{ ddns.last_update_ts }}</span></span>
+          {% endif %}
+          {% if ddns.last_result %}
+          <span class="text-slate-400">Статус: <span class="{% if ddns.last_result == 'ok' %}text-green-400{% else %}text-red-400{% endif %}">{{ ddns.last_result }}</span></span>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- WAN Failover -->
+  <div class="card">
+    <h2 class="text-lg font-semibold text-white mb-1">WAN Failover</h2>
+    <p class="text-slate-400 text-sm mb-4">
+      При потере соединения watchdog переключится на следующий uplink из списка <code class="text-slate-300">UPLINK_PRIORITY</code>.
+    </p>
+    <label class="flex items-center gap-2 cursor-pointer">
+      <input type="checkbox" name="FAILOVER_ENABLED" value="yes"
+             {% if config.get('FAILOVER_ENABLED','yes') == 'yes' %}checked{% endif %}
+             class="w-4 h-4 accent-blue-500">
+      <span class="text-sm text-slate-200">Включить автоматический failover</span>
+    </label>
+    <p class="text-xs text-slate-500 mt-2">
+      Порядок переключения задаётся в <code>UPLINK_PRIORITY</code> (LTE + WiFi страница).
+      Текущий порядок: <code class="text-slate-300">{{ config.get('UPLINK_PRIORITY','lte wifi eth') }}</code>
+    </p>
+  </div>
+
+  <div class="flex gap-3">
+    <button type="submit" class="btn-primary">Сохранить настройки</button>
+  </div>
+</div>
+</form>
+
+<!-- DDNS Force Update (separate form) -->
+<form method="POST" class="mt-2">
+  <input type="hidden" name="action" value="ddns_update">
+  <button type="submit" class="btn-secondary text-sm"
+          {% if config.get('DDNS_ENABLED','no') != 'yes' %}disabled{% endif %}>
+    Принудительно обновить DDNS сейчас
+  </button>
+</form>
+
+<!-- Backup / Restore -->
+<div class="card mt-6">
+  <h2 class="text-lg font-semibold text-white mb-1">Резервная копия конфига</h2>
+  <p class="text-slate-400 text-sm mb-4">
+    Скачать или восстановить содержимое <code class="text-slate-300">/etc/ltemod/</code>.
+  </p>
+  <div class="flex flex-wrap gap-4 items-start">
+    <div>
+      <a href="/api/backup" class="btn-primary inline-block">Скачать backup.tar.gz</a>
+    </div>
+    <div>
+      <p class="label mb-1">Восстановить из файла</p>
+      <form id="restore-form" onsubmit="doRestore(event)">
+        <div class="flex gap-2">
+          <input type="file" id="restore-file" name="backup" accept=".tar.gz,.tgz"
+                 class="text-sm text-slate-300 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0
+                        file:text-sm file:bg-slate-600 file:text-white hover:file:bg-slate-500 cursor-pointer">
+          <button type="submit" class="btn-danger text-sm px-3">Восстановить</button>
+        </div>
+        <p id="restore-result" class="text-xs text-slate-400 mt-1"></p>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+function toggleDns(val) {
+  document.getElementById('dns-server-row').classList.toggle('hidden', val === 'system');
+}
+function toggleDdns(checked) {
+  document.getElementById('ddns-fields').classList.toggle('hidden', !checked);
+}
+function toggleDdnsProvider(val) {
+  document.getElementById('ddns-zone-row').classList.toggle('hidden', val !== 'cloudflare');
+  document.getElementById('ddns-user-row').classList.toggle('hidden', val !== 'noip');
+}
+
+async function doRestore(e) {
+  e.preventDefault();
+  const file = document.getElementById('restore-file').files[0];
+  if (!file) return;
+  if (!confirm('Восстановить конфиг из файла? Текущие настройки будут перезаписаны.')) return;
+  const msg = document.getElementById('restore-result');
+  msg.textContent = 'Загружаю…';
+  const fd = new FormData();
+  fd.append('backup', file);
+  const r = await fetch('/api/restore', {method:'POST', body:fd});
+  const d = await r.json();
+  msg.textContent = d.ok ? '✓ ' + d.message : '✗ ' + (d.error || 'Ошибка');
+}
+
+// Init state
+toggleDdnsProvider(document.querySelector('[name=DDNS_PROVIDER]')?.value || 'cloudflare');
+</script>
+{% endblock %}

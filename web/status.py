@@ -157,6 +157,51 @@ def get_service_states() -> dict:
     return result
 
 
+def get_uplink_status(cfg: dict) -> dict:
+    uplink_mode = cfg.get("UPLINK_MODE", "lte")
+    lan_iface = cfg.get("LAN_IFACE", "end0")
+    wc_iface = cfg.get("WIFI_CLIENT_IFACE", "wlan1")
+
+    # Read runtime uplink info written by setup-uplink.sh / setup-routing.sh
+    rt_mode_file = Path("/run/ltemod/uplink_mode")
+    rt_iface_file = Path("/run/ltemod/uplink_iface")
+    active_mode = rt_mode_file.read_text().strip() if rt_mode_file.exists() else uplink_mode
+    active_iface = rt_iface_file.read_text().strip() if rt_iface_file.exists() else ""
+
+    result = {
+        "config_mode": uplink_mode,
+        "active_mode": active_mode,
+        "active_iface": active_iface,
+        "eth": {"iface": lan_iface, "up": False, "ip": None},
+        "wifi_client": {"iface": wc_iface, "up": False, "ip": None, "ssid": cfg.get("WIFI_CLIENT_SSID", "")},
+    }
+
+    # Ethernet status
+    _, rc = _run(["ip", "link", "show", lan_iface])
+    if rc == 0:
+        addr_out, _ = _run(["ip", "addr", "show", lan_iface])
+        m = re.search(r"inet (\S+)", addr_out)
+        if m:
+            result["eth"]["up"] = True
+            result["eth"]["ip"] = m.group(1)
+
+    # WiFi client status
+    _, rc = _run(["ip", "link", "show", wc_iface])
+    if rc == 0:
+        addr_out, _ = _run(["ip", "addr", "show", wc_iface])
+        m = re.search(r"inet (\S+)", addr_out)
+        if m:
+            result["wifi_client"]["up"] = True
+            result["wifi_client"]["ip"] = m.group(1)
+        # SSID
+        link_out, _ = _run(["iw", "dev", wc_iface, "link"])
+        m = re.search(r"SSID: (.+)", link_out)
+        if m:
+            result["wifi_client"]["ssid"] = m.group(1).strip()
+
+    return result
+
+
 def get_full_status(cfg: dict | None = None) -> dict:
     if cfg is None:
         from config import read_conf
@@ -169,6 +214,7 @@ def get_full_status(cfg: dict | None = None) -> dict:
 
     return {
         "timestamp": int(time.time()),
+        "uplink": get_uplink_status(cfg),
         "lte": get_lte_status(cfg.get("WWAN_IFACE", "wwan0")),
         "vpn": get_vpn_status(cfg),
         "wifi_ap": get_wifi_status(cfg),

@@ -1,5 +1,5 @@
 [Unit]
-Description=LTE Modem Connection (Sierra Wireless EM7565)
+Description=ltemod Uplink Manager (LTE / Ethernet / WiFi-client)
 Documentation=https://github.com/frlvmxm-droid/ltemod
 After=network.target NetworkManager.service ModemManager.service
 Wants=NetworkManager.service ModemManager.service
@@ -8,19 +8,14 @@ Wants=NetworkManager.service ModemManager.service
 Type=oneshot
 RemainAfterExit=yes
 
-# Загрузить конфиг
 EnvironmentFile=/etc/ltemod/ltemod.conf
 
-# Подключить модем
-ExecStart=/usr/local/bin/ltemod/connect-modem.sh
+# Запустить uplink в зависимости от UPLINK_MODE + настроить маршрутизацию
+ExecStart=/usr/local/bin/ltemod/setup-uplink.sh start
 
-# Настроить маршрутизацию (прямой LTE режим по умолчанию)
-ExecStartPost=/usr/local/bin/ltemod/setup-routing.sh
+# Остановить uplink при выходе
+ExecStop=/usr/local/bin/ltemod/setup-uplink.sh stop
 
-# Отключить при остановке сервиса
-ExecStop=/bin/bash -c 'nmcli connection down $NM_CON_NAME 2>/dev/null || true'
-
-# Ограничения
 Restart=on-failure
 RestartSec=30
 StartLimitIntervalSec=300
@@ -29,7 +24,6 @@ StartLimitBurst=3
 TimeoutStartSec=120
 TimeoutStopSec=30
 
-# Логирование
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=lte-modem

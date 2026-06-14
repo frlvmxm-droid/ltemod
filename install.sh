@@ -221,6 +221,7 @@ install -m 755 "$SCRIPT_DIR/modem/sms.sh"             "$INSTALL_BIN/sms.sh"
 
 # Network
 install -m 755 "$SCRIPT_DIR/network/setup-routing.sh"        "$INSTALL_BIN/setup-routing.sh"
+install -m 755 "$SCRIPT_DIR/network/setup-uplink.sh"          "$INSTALL_BIN/setup-uplink.sh"
 install -m 755 "$SCRIPT_DIR/network/vpn-toggle.sh"            "$INSTALL_BIN/vpn-toggle.sh"
 install -m 755 "$SCRIPT_DIR/network/killswitch.sh"            "$INSTALL_BIN/killswitch.sh"
 install -m 755 "$SCRIPT_DIR/network/bypass-routing.sh"        "$INSTALL_BIN/bypass-routing.sh"
@@ -248,7 +249,7 @@ ok "Scripts installed to $INSTALL_BIN"
 
 # Симлинки
 for cmd in vpn-toggle modem-status setup-vpn setup-amnezia setup-vless setup-ap \
-           setup-wifi-client detect-hardware detect-sim ltemod-doctor vpn-profile \
+           setup-wifi-client setup-uplink detect-hardware detect-sim ltemod-doctor vpn-profile \
            killswitch data-usage sms bypass-routing list-manager; do
     target="/usr/local/bin/${cmd}"
     ln -sf "$INSTALL_BIN/${cmd}.sh" "$target" 2>/dev/null || \

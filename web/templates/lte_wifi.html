@@ -6,8 +6,120 @@
 
 <form method="POST" action="/lte-wifi">
 
-  <!-- LTE Settings -->
+  <!-- ── Источник интернета ─────────────────────────────────────────── -->
   <div class="card mb-4">
+    <h2 class="font-semibold text-slate-200 mb-1">🌐 Источник интернета (Uplink)</h2>
+    <p class="text-xs text-slate-500 mb-4">
+      Активный:
+      <span class="font-mono {% if uplink.active_mode == 'eth' %}text-blue-400{% elif uplink.active_mode == 'wifi-client' %}text-purple-400{% else %}text-green-400{% endif %}">
+        {{ uplink.active_mode }}
+        {% if uplink.active_iface %}({{ uplink.active_iface }}){% endif %}
+      </span>
+    </p>
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4" id="uplink-cards">
+
+      <!-- LTE -->
+      <label class="uplink-card relative cursor-pointer rounded-lg border-2 p-4
+             {% if config.get('UPLINK_MODE','lte') == 'lte' %}border-blue-500 bg-blue-900/20{% else %}border-slate-700 hover:border-slate-500{% endif %}"
+             onclick="selectUplink('lte')">
+        <input type="radio" name="UPLINK_MODE" value="lte" class="sr-only"
+               {% if config.get('UPLINK_MODE','lte') == 'lte' %}checked{% endif %}>
+        <div class="text-2xl mb-2">📡</div>
+        <div class="font-semibold text-slate-200 text-sm">LTE Модем</div>
+        <div class="text-xs text-slate-400 mt-1">Sierra Wireless EM7565<br>SIM-карта</div>
+        {% if uplink.active_mode == 'lte' %}
+        <span class="absolute top-2 right-2 badge-up">активен</span>
+        {% endif %}
+      </label>
+
+      <!-- Ethernet -->
+      <label class="uplink-card relative cursor-pointer rounded-lg border-2 p-4
+             {% if config.get('UPLINK_MODE') == 'eth' %}border-blue-500 bg-blue-900/20{% else %}border-slate-700 hover:border-slate-500{% endif %}"
+             onclick="selectUplink('eth')">
+        <input type="radio" name="UPLINK_MODE" value="eth" class="sr-only"
+               {% if config.get('UPLINK_MODE') == 'eth' %}checked{% endif %}>
+        <div class="text-2xl mb-2">🔌</div>
+        <div class="font-semibold text-slate-200 text-sm">Ethernet кабель</div>
+        <div class="text-xs text-slate-400 mt-1">Кабель от другого<br>роутера/модема</div>
+        {% if uplink.eth.up %}
+        <span class="absolute top-2 right-2 badge-up">{{ uplink.eth.ip }}</span>
+        {% elif uplink.active_mode == 'eth' %}
+        <span class="absolute top-2 right-2 badge-warn">нет IP</span>
+        {% endif %}
+      </label>
+
+      <!-- WiFi Client -->
+      <label class="uplink-card relative cursor-pointer rounded-lg border-2 p-4
+             {% if config.get('UPLINK_MODE') == 'wifi-client' %}border-blue-500 bg-blue-900/20{% else %}border-slate-700 hover:border-slate-500{% endif %}"
+             onclick="selectUplink('wifi-client')">
+        <input type="radio" name="UPLINK_MODE" value="wifi-client" class="sr-only"
+               {% if config.get('UPLINK_MODE') == 'wifi-client' %}checked{% endif %}>
+        <div class="text-2xl mb-2">📶</div>
+        <div class="font-semibold text-slate-200 text-sm">WiFi подключение</div>
+        <div class="text-xs text-slate-400 mt-1">Подключиться к<br>другому роутеру по WiFi</div>
+        {% if uplink.wifi_client.up %}
+        <span class="absolute top-2 right-2 badge-up">{{ uplink.wifi_client.ip }}</span>
+        {% endif %}
+      </label>
+
+    </div>
+
+    <!-- Ethernet settings (shown when eth selected) -->
+    <div id="eth-settings" class="{% if config.get('UPLINK_MODE') != 'eth' %}hidden{% endif %} p-3 bg-slate-700/30 rounded-lg">
+      <div class="text-xs font-medium text-slate-300 mb-2">Настройки Ethernet</div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label class="label text-xs" for="LAN_IFACE">Ethernet интерфейс</label>
+          <input type="text" id="LAN_IFACE" name="LAN_IFACE" class="input-field text-sm"
+                 value="{{ config.get('LAN_IFACE', 'end0') }}" placeholder="end0 / eth0">
+          <div class="text-xs text-slate-500 mt-1">Проверить: <code class="font-mono bg-slate-700 px-1 rounded">ip link</code></div>
+        </div>
+        <div class="flex items-end">
+          {% if uplink.eth.up %}
+          <div class="text-sm text-green-400">✓ Подключён: {{ uplink.eth.ip }}</div>
+          {% elif config.get('UPLINK_MODE') == 'eth' %}
+          <div class="text-sm text-yellow-400">⚠ Нет IP — проверьте кабель</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- WiFi client settings (shown when wifi-client selected) -->
+    <div id="wifi-client-settings" class="{% if config.get('UPLINK_MODE') != 'wifi-client' %}hidden{% endif %} p-3 bg-slate-700/30 rounded-lg">
+      <div class="text-xs font-medium text-slate-300 mb-2">Подключение к WiFi роутеру</div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label class="label text-xs" for="WIFI_CLIENT_SSID">SSID роутера</label>
+          <input type="text" id="WIFI_CLIENT_SSID" name="WIFI_CLIENT_SSID" class="input-field text-sm"
+                 value="{{ config.get('WIFI_CLIENT_SSID', '') }}" placeholder="Имя WiFi сети роутера">
+        </div>
+        <div>
+          <label class="label text-xs" for="WIFI_CLIENT_PASSWORD">Пароль</label>
+          <input type="text" id="WIFI_CLIENT_PASSWORD" name="WIFI_CLIENT_PASSWORD" class="input-field text-sm"
+                 value="{{ config.get('WIFI_CLIENT_PASSWORD', '') }}" placeholder="Пароль WiFi">
+        </div>
+        <div>
+          <label class="label text-xs" for="WIFI_CLIENT_IFACE">Клиентский интерфейс</label>
+          <input type="text" id="WIFI_CLIENT_IFACE" name="WIFI_CLIENT_IFACE" class="input-field text-sm"
+                 value="{{ config.get('WIFI_CLIENT_IFACE', 'wlan1') }}" placeholder="wlan1">
+          <div class="text-xs text-slate-500 mt-1">Виртуальный iface для concurrent AP+STA</div>
+        </div>
+        <div class="flex items-end">
+          {% if uplink.wifi_client.up %}
+          <div class="text-sm text-green-400">✓ Подключён: {{ uplink.wifi_client.ssid }} ({{ uplink.wifi_client.ip }})</div>
+          {% endif %}
+        </div>
+      </div>
+      <div class="mt-2 p-2 bg-yellow-900/30 border border-yellow-700/50 rounded text-xs text-yellow-300">
+        ⚠ Для работы concurrent AP+STA на одном чипе (AP6256) оба интерфейса должны быть на одном канале.
+        Установи <strong>одинаковый канал</strong> в разделе WiFi AP и убедись что upstream роутер на том же канале.
+      </div>
+    </div>
+  </div>
+
+  <!-- ── LTE настройки ─────────────────────────────────────────────── -->
+  <div id="lte-settings" class="card mb-4 {% if config.get('UPLINK_MODE','lte') not in ('lte', 'auto', '') %}opacity-50{% endif %}">
     <h2 class="font-semibold text-slate-200 mb-4 pb-2 border-b border-slate-700">📡 LTE Модем</h2>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
@@ -18,7 +130,7 @@
       </div>
 
       <div>
-        <label class="label" for="MODEM_PROTO">Протокол подключения</label>
+        <label class="label" for="MODEM_PROTO">Протокол</label>
         <select id="MODEM_PROTO" name="MODEM_PROTO" class="input-field">
           <option value="mbim" {% if config.get('MODEM_PROTO','mbim') == 'mbim' %}selected{% endif %}>MBIM (рекомендуется)</option>
           <option value="qmi" {% if config.get('MODEM_PROTO') == 'qmi' %}selected{% endif %}>QMI</option>
@@ -50,15 +162,12 @@
       </div>
 
     </div>
-
-    <div class="mt-4 p-3 bg-slate-700/40 rounded text-xs text-slate-400">
-      <strong class="text-slate-300">Автоопределение APN:</strong>
-      Запустите <code class="font-mono bg-slate-700 px-1 rounded">sudo detect-sim --write</code>
-      в терминале для автоматической настройки APN по SIM-карте.
+    <div class="mt-3 p-2 bg-slate-700/40 rounded text-xs text-slate-400">
+      Автодетект APN: <code class="font-mono bg-slate-700 px-1 rounded">sudo detect-sim --write</code>
     </div>
   </div>
 
-  <!-- WiFi AP Settings -->
+  <!-- ── WiFi AP ────────────────────────────────────────────────────── -->
   <div class="card mb-4">
     <div class="flex items-center justify-between mb-4 pb-2 border-b border-slate-700">
       <h2 class="font-semibold text-slate-200">📶 WiFi Точка Доступа</h2>
@@ -81,7 +190,7 @@
       <div>
         <label class="label" for="WIFI_AP_PASSWORD">Пароль WiFi <span class="text-slate-500 font-normal">(8–63 симв.)</span></label>
         <input type="text" id="WIFI_AP_PASSWORD" name="WIFI_AP_PASSWORD" class="input-field"
-               value="{{ config.get('WIFI_AP_PASSWORD', '') }}" placeholder="минимум 8 символов">
+               value="{{ config.get('WIFI_AP_PASSWORD', '') }}">
       </div>
 
       <div>
@@ -94,9 +203,9 @@
       </div>
 
       <div>
-        <label class="label" for="WIFI_AP_IP">IP адрес роутера</label>
+        <label class="label" for="WIFI_AP_IP">IP роутера</label>
         <input type="text" id="WIFI_AP_IP" name="WIFI_AP_IP" class="input-field"
-               value="{{ config.get('WIFI_AP_IP', '192.168.10.1') }}" placeholder="192.168.10.1">
+               value="{{ config.get('WIFI_AP_IP', '192.168.10.1') }}">
       </div>
 
       <div>
@@ -114,13 +223,43 @@
     </div>
   </div>
 
-  <!-- Actions -->
+  <!-- ── Действия ──────────────────────────────────────────────────── -->
   <div class="flex flex-wrap gap-3">
     <button type="submit" class="btn-primary">Сохранить</button>
+    <button type="submit" name="restart_uplink" value="1" class="btn-secondary">
+      Сохранить + перезапустить uplink
+    </button>
     <button type="submit" name="restart_wifi" value="1" class="btn-secondary">
-      Сохранить и перезапустить WiFi AP
+      Перезапустить WiFi AP
     </button>
   </div>
 
 </form>
+
+<script>
+function selectUplink(mode) {
+  // Update radio buttons
+  document.querySelectorAll('input[name="UPLINK_MODE"]').forEach(r => r.checked = (r.value === mode));
+
+  // Update card styles
+  document.querySelectorAll('.uplink-card').forEach(card => {
+    const radio = card.querySelector('input[type="radio"]');
+    if (radio.value === mode) {
+      card.className = card.className.replace('border-slate-700', 'border-blue-500 bg-blue-900/20');
+    } else {
+      card.className = card.className
+        .replace('border-blue-500 bg-blue-900/20', 'border-slate-700')
+        .replace('bg-blue-900/20', '');
+    }
+  });
+
+  // Show/hide sub-settings
+  document.getElementById('eth-settings').classList.toggle('hidden', mode !== 'eth');
+  document.getElementById('wifi-client-settings').classList.toggle('hidden', mode !== 'wifi-client');
+
+  // Dim/undim LTE section
+  const lteSection = document.getElementById('lte-settings');
+  lteSection.classList.toggle('opacity-50', mode !== 'lte' && mode !== 'auto');
+}
+</script>
 {% endblock %}

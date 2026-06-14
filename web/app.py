@@ -78,18 +78,28 @@ def lte_wifi():
     if request.method == "POST":
         lte_keys = {"APN", "APN_USER", "APN_PASS", "MODEM_PROTO",
                     "WWAN_IFACE", "USSD_BALANCE_CODE"}
-        wifi_keys = {"WIFI_AP_SSID", "WIFI_AP_PASSWORD", "WIFI_AP_BAND",
-                     "WIFI_AP_CHANNEL_2G", "WIFI_AP_CHANNEL_5G", "WIFI_AP_IP"}
+        eth_keys = {"LAN_IFACE"}
+        wifi_client_keys = {"WIFI_CLIENT_IFACE", "WIFI_CLIENT_SSID", "WIFI_CLIENT_PASSWORD"}
+        wifi_ap_keys = {"WIFI_AP_SSID", "WIFI_AP_PASSWORD", "WIFI_AP_BAND",
+                        "WIFI_AP_CHANNEL_2G", "WIFI_AP_CHANNEL_5G", "WIFI_AP_IP"}
 
         updates = {}
-        for k in lte_keys | wifi_keys:
+        for k in lte_keys | eth_keys | wifi_client_keys | wifi_ap_keys:
             if k in request.form:
                 updates[k] = request.form[k]
+
+        # Booleans from checkboxes
         updates["WIFI_AP_ENABLED"] = "yes" if request.form.get("WIFI_AP_ENABLED") else "no"
+
+        # UPLINK_MODE from radio
+        if "UPLINK_MODE" in request.form:
+            updates["UPLINK_MODE"] = request.form["UPLINK_MODE"]
+            # Auto-sync WIFI_CLIENT_ENABLED
+            updates["WIFI_CLIENT_ENABLED"] = "yes" if updates["UPLINK_MODE"] == "wifi-client" else "no"
 
         try:
             write_conf(updates)
-            flash("Настройки сохранены", "success")
+            flash("Настройки сохранены. Перезагрузи устройство для применения нового источника интернета.", "success")
         except Exception as e:
             flash(f"Ошибка сохранения: {e}", "error")
 
@@ -98,10 +108,20 @@ def lte_wifi():
             flash("WiFi AP перезапущен" if rc == 0 else f"Ошибка перезапуска AP: {err}",
                   "info" if rc == 0 else "error")
 
+        if request.form.get("restart_uplink"):
+            result = subprocess.run(
+                ["systemctl", "restart", "lte-modem.service"],
+                capture_output=True, text=True, timeout=90,
+            )
+            flash("Uplink перезапущен" if result.returncode == 0 else
+                  f"Ошибка перезапуска uplink: {result.stderr}", "info" if result.returncode == 0 else "error")
+
         return redirect(url_for("lte_wifi"))
 
     conf = read_conf()
-    return render_template("lte_wifi.html", config=conf)
+    from status import get_uplink_status
+    uplink_st = get_uplink_status(conf)
+    return render_template("lte_wifi.html", config=conf, uplink=uplink_st)
 
 
 @app.route("/vpn", methods=["GET"])

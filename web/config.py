@@ -4,11 +4,20 @@ from pathlib import Path
 CONF_PATH = Path("/etc/ltemod/ltemod.conf")
 
 ALLOWED_KEYS = {
+    # Uplink
+    "UPLINK_MODE", "LAN_IFACE", "UPLINK_PRIORITY",
+    # LTE
     "APN", "APN_USER", "APN_PASS", "MODEM_PROTO", "WWAN_IFACE",
     "USSD_BALANCE_CODE",
+    # WiFi client (upstream)
+    "WIFI_CLIENT_ENABLED", "WIFI_CLIENT_IFACE",
+    "WIFI_CLIENT_SSID", "WIFI_CLIENT_PASSWORD",
+    # WiFi AP
     "WIFI_AP_ENABLED", "WIFI_AP_SSID", "WIFI_AP_PASSWORD",
     "WIFI_AP_BAND", "WIFI_AP_CHANNEL_2G", "WIFI_AP_CHANNEL_5G", "WIFI_AP_IP",
+    # VPN
     "VPN_PROTO", "VPN_KILLSWITCH", "VPN_DNS_REDIRECT",
+    # Bypass
     "BYPASS_ENABLED", "BYPASS_MODE", "BYPASS_LIST_PRESET",
 }
 

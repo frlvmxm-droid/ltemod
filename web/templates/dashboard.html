@@ -15,24 +15,31 @@
 <!-- Status grid -->
 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
 
-  <!-- LTE Card -->
+  <!-- Uplink Card -->
   <div class="card">
     <div class="flex items-center justify-between mb-3">
       <h2 class="font-semibold text-slate-200 flex items-center gap-2">
-        <span>📡</span> LTE Модем
+        <span id="uplink-icon">🌐</span>
+        <span>Uplink</span>
+        <span id="uplink-mode-label" class="text-xs text-slate-500 font-normal"></span>
       </h2>
       <span id="lte-badge" class="badge-warn">...</span>
     </div>
     <div class="space-y-2 text-sm">
       <div class="flex justify-between">
-        <span class="text-slate-400">Оператор</span>
-        <span id="lte-operator" class="text-slate-200">—</span>
+        <span class="text-slate-400">Интерфейс</span>
+        <span id="lte-iface" class="font-mono text-xs text-slate-200">—</span>
       </div>
       <div class="flex justify-between">
         <span class="text-slate-400">IP адрес</span>
         <span id="lte-ip" class="font-mono text-slate-200">—</span>
       </div>
-      <div class="flex justify-between">
+      <!-- LTE-specific rows -->
+      <div id="row-operator" class="flex justify-between">
+        <span class="text-slate-400">Оператор</span>
+        <span id="lte-operator" class="text-slate-200">—</span>
+      </div>
+      <div id="row-signal" class="flex justify-between">
         <span class="text-slate-400">Сигнал</span>
         <span id="lte-signal" class="text-slate-200">—</span>
       </div>
@@ -40,13 +47,10 @@
         <span class="text-slate-400">Трафик ↓/↑</span>
         <span id="lte-traffic" class="font-mono text-slate-200">—</span>
       </div>
-      <div class="flex justify-between">
-        <span class="text-slate-400">Интерфейс</span>
-        <span id="lte-iface" class="font-mono text-xs text-slate-400">—</span>
-      </div>
     </div>
     <div class="mt-3 pt-3 border-t border-slate-700 flex gap-2">
       <button onclick="reconnectModem()" class="btn-secondary text-xs py-1 px-3">Переподключить</button>
+      <a href="/lte-wifi" class="btn-secondary text-xs py-1 px-3">Настройки →</a>
     </div>
   </div>
 
@@ -184,15 +188,43 @@ function setText(id, val) {
 }
 
 function renderStatus(d) {
-  // LTE
-  const lteUp = d.lte && d.lte.up;
-  document.getElementById('lte-badge').className = lteUp ? 'badge-up' : 'badge-down';
-  document.getElementById('lte-badge').textContent = lteUp ? 'UP' : 'DOWN';
-  setText('lte-operator', d.lte?.operator || 'неизвестно');
-  setText('lte-ip', d.lte?.ip);
-  setText('lte-signal', d.lte?.signal_pct !== null ? d.lte.signal_pct + '%' : '—');
-  setText('lte-traffic', fmtBytes(d.lte?.rx_bytes) + ' / ' + fmtBytes(d.lte?.tx_bytes));
-  setText('lte-iface', d.lte?.iface);
+  // Uplink (generic — shows LTE, Ethernet, or WiFi-client info)
+  const uplinkMode = d.uplink?.active_mode || 'lte';
+  const uplinkIcons = { lte: '📡', eth: '🔌', 'wifi-client': '📶' };
+  const uplinkLabels = { lte: 'LTE', eth: 'Ethernet', 'wifi-client': 'WiFi Client' };
+  const uplinkIcon = document.getElementById('uplink-icon');
+  if (uplinkIcon) uplinkIcon.textContent = uplinkIcons[uplinkMode] || '🌐';
+  setText('uplink-mode-label', uplinkLabels[uplinkMode] || uplinkMode);
+
+  // Determine uplink IP and status based on active mode
+  let uplinkUp = false, uplinkIp = null, uplinkRx = 0, uplinkTx = 0;
+  if (uplinkMode === 'lte') {
+    uplinkUp = d.lte?.up || false;
+    uplinkIp = d.lte?.ip;
+    uplinkRx = d.lte?.rx_bytes || 0;
+    uplinkTx = d.lte?.tx_bytes || 0;
+    setText('lte-operator', d.lte?.operator || 'неизвестно');
+    setText('lte-signal', d.lte?.signal_pct !== null && d.lte?.signal_pct !== undefined ? d.lte.signal_pct + '%' : '—');
+    document.getElementById('row-operator')?.classList?.remove('hidden');
+    document.getElementById('row-signal')?.classList?.remove('hidden');
+  } else if (uplinkMode === 'eth') {
+    uplinkUp = d.uplink?.eth?.up || false;
+    uplinkIp = d.uplink?.eth?.ip;
+    document.getElementById('row-operator')?.classList?.add('hidden');
+    document.getElementById('row-signal')?.classList?.add('hidden');
+  } else if (uplinkMode === 'wifi-client') {
+    uplinkUp = d.uplink?.wifi_client?.up || false;
+    uplinkIp = d.uplink?.wifi_client?.ip;
+    setText('lte-operator', d.uplink?.wifi_client?.ssid || '—');
+    document.getElementById('row-operator')?.classList?.remove('hidden');
+    document.getElementById('row-signal')?.classList?.add('hidden');
+  }
+
+  document.getElementById('lte-badge').className = uplinkUp ? 'badge-up' : 'badge-down';
+  document.getElementById('lte-badge').textContent = uplinkUp ? 'UP' : 'DOWN';
+  setText('lte-ip', uplinkIp);
+  setText('lte-traffic', fmtBytes(uplinkRx) + ' / ' + fmtBytes(uplinkTx));
+  setText('lte-iface', d.uplink?.active_iface || d.lte?.iface);
 
   // VPN
   const mode = d.vpn?.active_mode || 'direct';

@@ -147,7 +147,9 @@ else
     # Обычный режим: отдельные FORWARD для LAN (end0) и WiFi AP (wlan0)
 
     # FORWARD: LAN Ethernet → uplink
-    if [[ "$WIFI_AP_ENABLED" != "yes" ]] || [[ "$active_uplink" != "$WIFI_AP_IFACE" ]]; then
+    # Пропустить если: LAN_IFACE сам является uplink'ом (eth-режим) или совпадает с WiFi AP
+    if [[ "$active_uplink" != "$LAN_IFACE" ]] && \
+       [[ "$active_uplink" != "$WIFI_AP_IFACE" ]]; then
         if ! iptables -C FORWARD -i "$LAN_IFACE" -o "$active_uplink" -j ACCEPT &>/dev/null; then
             iptables -A FORWARD -i "$LAN_IFACE" -o "$active_uplink" -j ACCEPT
         fi

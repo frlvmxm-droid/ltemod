@@ -183,6 +183,7 @@ if [[ "$_SOURCED" == "0" ]]; then
         _set WWAN_IFACE "$wwan"
         echo ""
         info "Review with: cat $CONFIG_FILE"
+        info "Для автонастройки APN по SIM-карте: sudo detect-sim --write"
     else
         echo ""
         info "Apply to config: sudo $0 --write"

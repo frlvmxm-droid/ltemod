@@ -238,6 +238,7 @@ install -m 755 "$SCRIPT_DIR/wifi/setup-wifi-client.sh"    "$INSTALL_BIN/setup-wi
 
 # Tools (диагностика и автодетект железа)
 install -m 755 "$SCRIPT_DIR/tools/detect-hardware.sh"     "$INSTALL_BIN/detect-hardware.sh"
+install -m 755 "$SCRIPT_DIR/tools/detect-sim.sh"          "$INSTALL_BIN/detect-sim.sh"
 install -m 755 "$SCRIPT_DIR/tools/ltemod-doctor.sh"       "$INSTALL_BIN/ltemod-doctor.sh"
 
 # Uninstaller (self-contained)
@@ -247,8 +248,8 @@ ok "Scripts installed to $INSTALL_BIN"
 
 # Симлинки
 for cmd in vpn-toggle modem-status setup-vpn setup-amnezia setup-vless setup-ap \
-           setup-wifi-client detect-hardware ltemod-doctor vpn-profile killswitch \
-           data-usage sms bypass-routing list-manager; do
+           setup-wifi-client detect-hardware detect-sim ltemod-doctor vpn-profile \
+           killswitch data-usage sms bypass-routing list-manager; do
     target="/usr/local/bin/${cmd}"
     ln -sf "$INSTALL_BIN/${cmd}.sh" "$target" 2>/dev/null || \
     ln -sf "$INSTALL_BIN/${cmd}"    "$target" 2>/dev/null || true
@@ -361,7 +362,11 @@ header "Detecting hardware"
 info "Определяю сетевые интерфейсы этого устройства..."
 bash "$INSTALL_BIN/detect-hardware.sh" || true
 echo ""
+info "Определяю оператора SIM-карты..."
+bash "$INSTALL_BIN/detect-sim.sh" 2>/dev/null || true
+echo ""
 info "Записать найденные интерфейсы в конфиг: sudo detect-hardware --write"
+info "Записать настройки APN в конфиг:        sudo detect-sim --write"
 
 # ===== Итог =====
 

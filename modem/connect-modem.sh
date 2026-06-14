@@ -208,6 +208,29 @@ detect_wwan_iface() {
 
 # === Главная логика ===
 
+# ---------------------------------------------------------------------------
+# Автоопределение APN по SIM-карте (если APN_AUTO="yes")
+# ---------------------------------------------------------------------------
+if [[ "${APN_AUTO:-no}" == "yes" ]]; then
+    _detect_sim_script=""
+    for _p in "/usr/local/bin/ltemod/detect-sim.sh" \
+              "$(dirname "$0")/../tools/detect-sim.sh"; do
+        [[ -f "$_p" ]] && { _detect_sim_script="$_p"; break; }
+    done
+
+    if [[ -n "$_detect_sim_script" ]]; then
+        _detected_apn=$(bash "$_detect_sim_script" --get-apn 2>/dev/null || true)
+        if [[ -n "$_detected_apn" ]]; then
+            log "APN auto-detected: $_detected_apn (config APN was: $APN)"
+            APN="$_detected_apn"
+        else
+            log "APN auto-detection: no result — using config APN: $APN"
+        fi
+    else
+        log "APN auto-detection: detect-sim.sh not found — using config APN: $APN"
+    fi
+fi
+
 log "=== Starting LTE modem connection ==="
 log "Protocol: $MODEM_PROTO | Device: $MODEM_DEV | APN: $APN"
 

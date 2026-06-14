@@ -124,8 +124,17 @@ UPLINK_PRIORITY="lte wifi eth"
 ### VPN
 
 ```bash
-VPN_PROTO="wg"    # wg / amnezia / vless / none
+VPN_PROTO="none"  # none / wg / amnezia / vless
 ```
+
+| Значение | Описание | Когда использовать |
+|----------|----------|-------------------|
+| `none` | VPN отключён, трафик идёт напрямую | По умолчанию; без VPN-конфига |
+| `wg` | WireGuard (стандартный туннель) | Быстрый и широко поддерживаемый |
+| `amnezia` | AmneziaWG (обфусцированный WireGuard) | Если WireGuard блокируется провайдером |
+| `vless` | XTLS-Reality через sing-box | Обход DPI; требует sing-box |
+
+`ltemod-vpn.service` читает `VPN_PROTO` при каждом старте системы и автоматически поднимает туннель. Значение `none` — сервис завершается без ошибки.
 
 ---
 
@@ -435,6 +444,8 @@ ltemod/
     ├── lte-watchdog.service            # watchdog сервис
     ├── lte-watchdog.timer              # watchdog таймер (каждые 5 мин)
     ├── wifi-ap.service                 # автостарт WiFi AP
+    ├── ltemod-vpn.service              # автостарт VPN (читает VPN_PROTO из конфига)
+    ├── sing-box.service                # sing-box daemon (VLESS, управляется vpn-toggle)
     ├── ltemod-bypass-update.service    # обновление bypass-списков
     └── ltemod-bypass-update.timer      # ежедневный таймер (04:00)
 ```

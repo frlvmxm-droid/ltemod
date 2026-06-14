@@ -293,6 +293,10 @@ wg_on() {
         exit 1
     fi
 
+    # Записать режим ДО старта — watchdog сможет повторить попытку если VPN упадёт
+    mkdir -p "$RUNTIME_DIR"
+    echo "wg" > "$MODE_FILE"
+
     if ! ip link show "$VPN_IFACE" &>/dev/null; then
         wg-quick up "$VPN_IFACE" || { log_err "Failed to start WireGuard"; exit 1; }
         ok "WireGuard $VPN_IFACE started"
@@ -302,9 +306,6 @@ wg_on() {
 
     setup_vpn_routes "$VPN_IFACE"
     setup_vpn_iptables "$VPN_IFACE"
-
-    mkdir -p "$RUNTIME_DIR"
-    echo "wg" > "$MODE_FILE"
     echo ""
     ok "WireGuard VPN ENABLED"
     echo -e "  Traffic: ${CYAN}LAN/WiFi → WireGuard ($VPN_IFACE) → Internet${NC}"
@@ -345,6 +346,9 @@ amnezia_on() {
         exit 1
     fi
 
+    mkdir -p "$RUNTIME_DIR"
+    echo "amnezia" > "$MODE_FILE"
+
     if ! ip link show "$AMNEZIA_IFACE" &>/dev/null; then
         awg-quick up "$AMNEZIA_CONFIG" || { log_err "Failed to start AmneziaWG"; exit 1; }
         ok "AmneziaWG $AMNEZIA_IFACE started"
@@ -354,9 +358,6 @@ amnezia_on() {
 
     setup_vpn_routes "$AMNEZIA_IFACE"
     setup_vpn_iptables "$AMNEZIA_IFACE"
-
-    mkdir -p "$RUNTIME_DIR"
-    echo "amnezia" > "$MODE_FILE"
     echo ""
     ok "AmneziaWG VPN ENABLED"
     echo -e "  Traffic: ${CYAN}LAN/WiFi → AmneziaWG ($AMNEZIA_IFACE) → Internet${NC}"
@@ -411,6 +412,9 @@ vless_on() {
 
     local uplink
     uplink=$(get_uplink_iface)
+
+    mkdir -p "$RUNTIME_DIR"
+    echo "vless" > "$MODE_FILE"
 
     systemctl start sing-box || { log_err "Failed to start sing-box service"; exit 1; }
     ok "sing-box service started"

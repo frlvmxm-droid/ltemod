@@ -336,6 +336,9 @@ ok "wifi-ap.service enabled (запустится при наличии wlan0)"
 systemctl enable ltemod-vpn.service
 ok "ltemod-vpn.service enabled (автостарт VPN по VPN_PROTO из конфига)"
 
+systemctl enable sing-box.service
+ok "sing-box.service enabled (ConditionFileNotEmpty: запустится только после setup-vless)"
+
 # ===== NetworkManager — не вмешиваться в AP/VPN интерфейсы =====
 
 header "Configuring NetworkManager"
@@ -363,7 +366,7 @@ info "Определяю сетевые интерфейсы этого устр
 bash "$INSTALL_BIN/detect-hardware.sh" || true
 echo ""
 info "Определяю оператора SIM-карты..."
-bash "$INSTALL_BIN/detect-sim.sh" 2>/dev/null || true
+bash "$INSTALL_BIN/detect-sim.sh" || true
 echo ""
 info "Записать найденные интерфейсы в конфиг: sudo detect-hardware --write"
 info "Записать настройки APN в конфиг:        sudo detect-sim --write"

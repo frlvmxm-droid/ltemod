@@ -235,19 +235,28 @@ fi
 section "VPN configuration"
 case "$VPN_PROTO" in
     wg)
+        command -v wg-quick &>/dev/null \
+            && ok "wg-quick: found" \
+            || fail "wg-quick not found — установи: apt install wireguard-tools"
         [[ -f "$WG_CONFIG" ]] && ok "WireGuard config: $WG_CONFIG" \
                               || warn "WireGuard config not found: $WG_CONFIG (run setup-vpn)"
         ;;
     amnezia)
+        command -v awg-quick &>/dev/null \
+            && ok "awg-quick: found" \
+            || fail "awg-quick not found — установи AmneziaWG (см. README)"
         [[ -f "$AMNEZIA_CONFIG" ]] && ok "AmneziaWG config: $AMNEZIA_CONFIG" \
                                    || warn "AmneziaWG config not found: $AMNEZIA_CONFIG (run setup-amnezia)"
         ;;
     vless)
+        command -v sing-box &>/dev/null \
+            && ok "sing-box: found ($(sing-box version 2>/dev/null | head -1 || echo 'unknown'))" \
+            || fail "sing-box not found — запусти: sudo bash install.sh"
         [[ -f "$VLESS_CONFIG" ]] && ok "VLESS config: $VLESS_CONFIG" \
                                  || warn "VLESS config not found: $VLESS_CONFIG (run setup-vless)"
         ;;
     none|"")
-        ok "No VPN selected (VPN_PROTO=none)"
+        ok "VPN отключён (VPN_PROTO=none) — трафик идёт напрямую"
         ;;
     *)
         warn "Unknown VPN_PROTO='$VPN_PROTO' (use: wg|amnezia|vless|none)"

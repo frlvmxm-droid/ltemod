@@ -3,8 +3,6 @@ Description=LTE Modem Connection (Sierra Wireless EM7565)
 Documentation=https://github.com/frlvmxm-droid/ltemod
 After=network.target NetworkManager.service ModemManager.service
 Wants=NetworkManager.service ModemManager.service
-# Не запускаться если нет устройства модема
-ConditionPathExists=/dev/cdc-wdm0
 
 [Service]
 Type=oneshot

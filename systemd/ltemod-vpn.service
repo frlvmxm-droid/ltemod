@@ -10,15 +10,21 @@ Type=oneshot
 RemainAfterExit=yes
 
 # Читает VPN_PROTO из конфига и запускает нужный туннель.
-# Если VPN_PROTO="none" или конфиг туннеля не установлен — выходит без ошибки.
+# VPN_PROTO="none" — сервис завершается без ошибки (VPN не нужен).
+# Если конфиг туннеля не установлен — vpn-toggle вернёт ошибку, сервис перезапустится.
 ExecStart=/bin/bash -c '\
     . /etc/ltemod/ltemod.conf; \
-    [[ "${VPN_PROTO:-none}" != "none" ]] && \
-    /usr/local/bin/ltemod/vpn-toggle.sh "$VPN_PROTO" on || true'
+    [[ "${VPN_PROTO:-none}" == "none" ]] && exit 0; \
+    exec /usr/local/bin/ltemod/vpn-toggle.sh "$VPN_PROTO" on'
 
 ExecStop=/usr/local/bin/ltemod/vpn-toggle.sh off
 
-TimeoutStartSec=60
+Restart=on-failure
+RestartSec=30
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+TimeoutStartSec=90
 TimeoutStopSec=30
 
 StandardOutput=journal

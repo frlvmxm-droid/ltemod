@@ -99,12 +99,16 @@ connect_mbim() {
 
     # Создать новое GSM/MBIM соединение
     log "Creating NM connection for APN: $APN"
-    nmcli connection add \
-        type gsm \
-        ifname "$MODEM_DEV" \
-        con-name "$NM_CON_NAME" \
-        apn "$APN" \
-        connection.autoconnect yes || {
+    local nmcli_args=(
+        type gsm
+        ifname "$MODEM_DEV"
+        con-name "$NM_CON_NAME"
+        apn "$APN"
+        connection.autoconnect yes
+    )
+    [[ -n "${APN_USER:-}" ]] && nmcli_args+=(gsm.username "$APN_USER")
+    [[ -n "${APN_PASS:-}" ]] && nmcli_args+=(gsm.password "$APN_PASS")
+    nmcli connection add "${nmcli_args[@]}" || {
         log_err "Failed to create NM connection"
         return 1
     }
@@ -140,8 +144,8 @@ connect_qmi() {
     local qmi_conf="/etc/qmi-network.conf"
     cat > "$qmi_conf" <<EOF
 APN=$APN
-APN_USER=
-APN_PASS=
+APN_USER=${APN_USER:-}
+APN_PASS=${APN_PASS:-}
 PROXY=yes
 EOF
 

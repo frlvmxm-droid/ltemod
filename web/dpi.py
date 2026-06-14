@@ -356,8 +356,17 @@ def detect(targets=None, timeout_tcp: float = 5.0) -> dict:
             result["evidence"].append(detail)
             return result
 
-    # All clear
-    if result["block_type"] == "none":
+    # All clear — TCP and TLS both succeeded without early return
+    if result["block_type"] == "dns":
+        # DNS mismatch detected in Stage 0, but all TCP/HTTP/TLS probes passed.
+        # This indicates split-horizon DNS or resolver difference, not an actual block.
+        result["block_type"] = "none"
+        result["reason_code"] = "dns_mismatch_only"
+        result["confidence"] = 0.8
+        result["evidence"].append(
+            "DNS отличается от DoH, но TCP/HTTPS соединения работают — вероятно Split-horizon DNS, не блокировка"
+        )
+    elif result["block_type"] == "none":
         result["reason_code"] = "ok"
         result["confidence"] = 0.9 if http_ok else 0.75
         result["evidence"].append("DPI блокировка не обнаружена")

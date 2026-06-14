@@ -27,7 +27,7 @@ FAILOVER_ENABLED="${FAILOVER_ENABLED:-yes}"
 NM_CON_NAME="${NM_CON_NAME:-lte-connection}"
 LOG_TAG="${LOG_TAG:-ltemod}"
 WATCHDOG_STATE_FILE="${RUNTIME_DIR}/watchdog_state"
-DEGRADED_THRESHOLD="${DEGRADED_THRESHOLD:-1}"
+DEGRADED_THRESHOLD="${DEGRADED_THRESHOLD:-0}"
 
 get_watchdog_state() { [[ -f "$WATCHDOG_STATE_FILE" ]] && cat "$WATCHDOG_STATE_FILE" || echo "healthy"; }
 set_watchdog_state() { echo "$1" > "$WATCHDOG_STATE_FILE"; }
@@ -358,6 +358,7 @@ fi
 
 # Если обычное переподключение не помогло — попробовать failover
 if try_failover; then
+    uplink_iface=$(get_active_uplink_iface)
     sleep 10
     reconnect_vpn
     sleep 5

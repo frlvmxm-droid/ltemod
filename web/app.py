@@ -6,6 +6,7 @@ import subprocess
 import tarfile
 import threading
 from pathlib import Path
+from urllib.parse import urlparse
 
 from flask import (Flask, render_template, request, redirect, url_for,
                    session, flash, jsonify, send_file)
@@ -55,7 +56,10 @@ def login():
         if check_password(pw):
             session.permanent = True
             session["authenticated"] = True
-            next_url = request.args.get("next") or url_for("dashboard")
+            next_url = request.args.get("next") or ""
+            parsed = urlparse(next_url)
+            if not next_url or parsed.scheme or parsed.netloc:
+                next_url = url_for("dashboard")
             return redirect(next_url)
         flash("Неверный пароль", "error")
     return render_template("login.html")
@@ -425,6 +429,8 @@ def api_clients_static():
         ipaddress.IPv4Address(ip)
     except ValueError:
         return jsonify({"ok": False, "error": "invalid IP address"}), 400
+    if hostname and not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9._-]{0,62}$', hostname):
+        return jsonify({"ok": False, "error": "invalid hostname"}), 400
 
     static_file = Path("/etc/dnsmasq.d/ltemod-static.conf")
     existing = static_file.read_text() if static_file.exists() else ""
@@ -529,17 +535,56 @@ def settings():
             updates = {}
             for k in ("DNS_MODE", "DNS_SERVER", "DDNS_PROVIDER",
                       "DDNS_DOMAIN", "DDNS_TOKEN", "DDNS_ZONE_ID", "DDNS_USERNAME",
-                      "DESYNC_MODE", "DESYNC_PORTS", "DESYNC_MSS", "DESYNC_TTL"):
+                      "DESYNC_MODE"):
                 if k in request.form:
                     updates[k] = request.form[k]
             updates["DDNS_ENABLED"] = "yes" if request.form.get("DDNS_ENABLED") else "no"
             updates["FAILOVER_ENABLED"] = "yes" if request.form.get("FAILOVER_ENABLED") else "no"
             updates["DESYNC_ENABLED"] = "yes" if request.form.get("DESYNC_ENABLED") else "no"
-            try:
-                write_conf(updates)
-                flash("Настройки сохранены", "success")
-            except Exception as e:
-                flash(f"Ошибка: {e}", "error")
+
+            # Validate desync fields to prevent shell injection via config source
+            desync_err = None
+            if "DESYNC_PORTS" in request.form:
+                ports_val = request.form["DESYNC_PORTS"].strip()
+                if ports_val and not re.match(r'^[0-9]+(,[0-9]+)*$', ports_val):
+                    desync_err = "DESYNC_PORTS: только цифры, разделённые запятыми"
+                else:
+                    updates["DESYNC_PORTS"] = ports_val
+            if "DESYNC_MSS" in request.form:
+                mss_val = request.form["DESYNC_MSS"].strip()
+                if mss_val:
+                    try:
+                        mss_int = int(mss_val)
+                        if not (40 <= mss_int <= 1460):
+                            desync_err = "DESYNC_MSS: должно быть от 40 до 1460"
+                        else:
+                            updates["DESYNC_MSS"] = str(mss_int)
+                    except ValueError:
+                        desync_err = "DESYNC_MSS: должно быть целым числом"
+                else:
+                    updates["DESYNC_MSS"] = ""
+            if "DESYNC_TTL" in request.form:
+                ttl_val = request.form["DESYNC_TTL"].strip()
+                if ttl_val:
+                    try:
+                        ttl_int = int(ttl_val)
+                        if not (1 <= ttl_int <= 64):
+                            desync_err = "DESYNC_TTL: должно быть от 1 до 64"
+                        else:
+                            updates["DESYNC_TTL"] = str(ttl_int)
+                    except ValueError:
+                        desync_err = "DESYNC_TTL: должно быть целым числом"
+                else:
+                    updates["DESYNC_TTL"] = ""
+
+            if desync_err:
+                flash(desync_err, "error")
+            else:
+                try:
+                    write_conf(updates)
+                    flash("Настройки сохранены", "success")
+                except Exception as e:
+                    flash(f"Ошибка: {e}", "error")
             if "DNS_MODE" in updates or "DNS_SERVER" in updates:
                 rc, _, err = run_script("setup-dns.sh", "apply", timeout=60)
                 if rc != 0:
@@ -663,8 +708,8 @@ def api_awg_profile():
 
     try:
         write_conf({"AWG_PROFILE": profile})
-    except Exception:
-        pass
+    except Exception as e:
+        app.logger.warning("Failed to persist AWG_PROFILE: %s", e)
 
     return jsonify({"ok": True, "profile": profile, "output": out})
 

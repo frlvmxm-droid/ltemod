@@ -381,8 +381,8 @@ def get_sms_list() -> list:
         return []
     sms_ids = re.findall(r"/SMS/(\d+)", sms_out)
     messages = []
-    for sms_id in sms_ids[:25]:
-        detail, _ = _run(["mmcli", "-s", sms_id, "-K"], timeout=3)
+    for sms_id in sms_ids[:10]:
+        detail, _ = _run(["mmcli", "-s", sms_id, "-K"], timeout=2)
         msg = {"id": sms_id, "number": "", "text": "", "timestamp": "", "direction": "rx"}
         for line in detail.splitlines():
             if ":" not in line:

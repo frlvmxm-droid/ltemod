@@ -67,4 +67,12 @@ def write_conf(updates: dict) -> None:
         else:
             new_lines.append(line)
 
+    # Append keys that weren't present in the file at all
+    missing = set(updates) - updated
+    if missing:
+        if new_lines and not new_lines[-1].endswith("\n"):
+            new_lines.append("\n")
+        for key in sorted(missing):
+            new_lines.append(f'{key}="{updates[key]}"\n')
+
     CONF_PATH.write_text("".join(new_lines))

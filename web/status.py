@@ -311,6 +311,112 @@ def get_ddns_status() -> dict:
     return {"last_ip": last_ip, "last_update_ts": ts, "last_result": last_result}
 
 
+def get_modem_detail() -> dict:
+    """Detailed modem info from mmcli -m N -K."""
+    result = {
+        "found": False,
+        "manufacturer": None, "model": None, "imei": None,
+        "imsi": None, "iccid": None,
+        "operator": None, "state": None, "tech": None,
+        "signal_pct": None, "registration": None,
+    }
+    out, rc = _run(["mmcli", "-L"], timeout=3)
+    m = re.search(r"/Modems/(\d+)", out)
+    if not m:
+        return result
+    idx = m.group(1)
+    detail, _ = _run(["mmcli", "-m", idx, "-K"], timeout=5)
+    result["found"] = True
+    for line in detail.splitlines():
+        if ":" not in line:
+            continue
+        key, _, val = line.strip().partition(":")
+        key = key.strip().lower()
+        val = val.strip()
+        if not val or val in ("--", "none"):
+            continue
+        if "generic.manufacturer" in key:
+            result["manufacturer"] = val
+        elif "generic.model" in key:
+            result["model"] = val
+        elif "generic.equipment-identifier" in key:
+            result["imei"] = val
+        elif "generic.state" in key:
+            result["state"] = val
+        elif "signal-quality.value" in key:
+            try:
+                result["signal_pct"] = int(val.rstrip("%"))
+            except ValueError:
+                pass
+        elif "access-technologies" in key:
+            result["tech"] = val
+        elif "operator-name" in key and not result["operator"]:
+            result["operator"] = val
+        elif "3gpp.imsi" in key:
+            result["imsi"] = val
+        elif "3gpp.registration-state" in key:
+            result["registration"] = val
+
+    sim_out, _ = _run(["mmcli", "-m", idx, "--sim"], timeout=3)
+    for line in sim_out.splitlines():
+        if "iccid" in line.lower() and ":" in line:
+            _, _, val = line.partition(":")
+            val = val.strip()
+            if val and val not in ("--", "none"):
+                result["iccid"] = val
+                break
+
+    return result
+
+
+def get_sms_list() -> list:
+    """List SMS messages via mmcli."""
+    out, rc = _run(["mmcli", "-L"], timeout=3)
+    m = re.search(r"/Modems/(\d+)", out)
+    if not m:
+        return []
+    idx = m.group(1)
+    sms_out, sms_rc = _run(["mmcli", "-m", idx, "--messaging-list-sms"], timeout=5)
+    if sms_rc != 0:
+        return []
+    sms_ids = re.findall(r"/SMS/(\d+)", sms_out)
+    messages = []
+    for sms_id in sms_ids[:25]:
+        detail, _ = _run(["mmcli", "-s", sms_id, "-K"], timeout=3)
+        msg = {"id": sms_id, "number": "", "text": "", "timestamp": "", "direction": "rx"}
+        for line in detail.splitlines():
+            if ":" not in line:
+                continue
+            key, _, val = line.strip().partition(":")
+            key = key.strip().lower()
+            val = val.strip()
+            if "content.number" in key:
+                msg["number"] = val
+            elif "content.text" in key:
+                msg["text"] = val
+            elif "properties.timestamp" in key:
+                msg["timestamp"] = val
+            elif "properties.direction" in key:
+                msg["direction"] = val
+        messages.append(msg)
+    return messages
+
+
+def get_watchdog_state() -> str:
+    p = Path("/run/ltemod/watchdog_state")
+    return p.read_text().strip() if p.exists() else "unknown"
+
+
+def get_desync_state() -> str:
+    p = Path("/run/ltemod/desync_mode")
+    return p.read_text().strip() if p.exists() else "off"
+
+
+def get_awg_profile() -> str:
+    p = Path("/run/ltemod/awg_profile")
+    return p.read_text().strip() if p.exists() else ""
+
+
 def get_full_status(cfg: dict | None = None) -> dict:
     if cfg is None:
         from config import read_conf
@@ -332,5 +438,8 @@ def get_full_status(cfg: dict | None = None) -> dict:
             "internet_ok": ping_rc == 0,
             "ip_forward": ip_forward,
             "services": get_service_states(),
+            "watchdog_state": get_watchdog_state(),
+            "desync_mode": get_desync_state(),
+            "awg_profile": get_awg_profile(),
         },
     }

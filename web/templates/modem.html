@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+{% block title %}Модем — ltemod{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-xl font-semibold">Модем &amp; SIM</h1>
+  <button onclick="refreshDetail()" class="btn-secondary text-sm">Обновить</button>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+
+  <!-- Modem Info -->
+  <div class="card">
+    <h2 class="font-semibold text-slate-200 mb-3">Информация об устройстве</h2>
+    {% if modem.found %}
+    <div class="space-y-2 text-sm">
+      <div class="flex justify-between">
+        <span class="text-slate-400">Производитель</span>
+        <span class="text-slate-200">{{ modem.manufacturer or '—' }}</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-slate-400">Модель</span>
+        <span class="font-mono text-slate-200">{{ modem.model or '—' }}</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-slate-400">IMEI</span>
+        <span class="font-mono text-xs text-slate-200 break-all">{{ modem.imei or '—' }}</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-slate-400">Состояние</span>
+        <span class="{% if modem.state == 'connected' %}text-green-400{% else %}text-yellow-400{% endif %}">
+          {{ modem.state or '—' }}
+        </span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-slate-400">Технология</span>
+        <span class="font-mono text-slate-200 uppercase">{{ modem.tech or '—' }}</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-slate-400">Сигнал</span>
+        <span id="signal-bar">
+          {% if modem.signal_pct is not none %}
+            <span class="{% if modem.signal_pct >= 60 %}text-green-400{% elif modem.signal_pct >= 30 %}text-yellow-400{% else %}text-red-400{% endif %}">
+              {{ modem.signal_pct }}%
+            </span>
+          {% else %}—{% endif %}
+        </span>
+      </div>
+    </div>
+    {% else %}
+    <div class="text-slate-500 text-sm py-4 text-center">Модем не найден (mmcli -L пустой)</div>
+    {% endif %}
+  </div>
+
+  <!-- SIM Info -->
+  <div class="card">
+    <h2 class="font-semibold text-slate-200 mb-3">SIM карта</h2>
+    {% if modem.found %}
+    <div class="space-y-2 text-sm">
+      <div class="flex justify-between">
+        <span class="text-slate-400">Оператор</span>
+        <span class="text-slate-200">{{ modem.operator or '—' }}</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-slate-400">Регистрация</span>
+        <span class="{% if modem.registration == 'home' %}text-green-400{% elif modem.registration %}text-yellow-400{% else %}text-slate-500{% endif %}">
+          {{ modem.registration or '—' }}
+        </span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-slate-400">IMSI</span>
+        <span class="font-mono text-xs text-slate-200">{{ modem.imsi or '—' }}</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-slate-400">ICCID</span>
+        <span class="font-mono text-xs text-slate-200 break-all">{{ modem.iccid or '—' }}</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-slate-400">Код баланса</span>
+        <span class="font-mono text-slate-200">{{ config.get('USSD_BALANCE_CODE', '*100#') }}</span>
+      </div>
+    </div>
+    {% else %}
+    <div class="text-slate-500 text-sm py-4 text-center">Нет данных</div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- USSD -->
+<div class="card mb-4">
+  <h2 class="font-semibold text-slate-200 mb-3">USSD запросы</h2>
+  <div class="flex flex-wrap gap-3 items-end mb-3">
+    <div>
+      <label class="label text-xs">Быстрый баланс</label>
+      <button onclick="queryUSSD('{{ config.get('USSD_BALANCE_CODE', '*100#') }}')"
+              class="btn-primary text-sm">
+        {{ config.get('USSD_BALANCE_CODE', '*100#') }} — Баланс
+      </button>
+    </div>
+    <div class="flex gap-2">
+      <div>
+        <label class="label text-xs">Произвольный USSD</label>
+        <input id="ussd-code" type="text" placeholder="*100#" value=""
+               class="input-field w-36 font-mono text-sm" onkeydown="if(event.key==='Enter')queryUSSD()">
+      </div>
+      <div class="flex items-end">
+        <button onclick="queryUSSD()" class="btn-secondary text-sm">Отправить</button>
+      </div>
+    </div>
+  </div>
+  <div id="ussd-result" class="hidden bg-slate-900/60 rounded p-3 text-sm font-mono text-slate-200 whitespace-pre-wrap"></div>
+</div>
+
+<!-- SMS Inbox -->
+<div class="card mb-4">
+  <div class="flex items-center justify-between mb-3">
+    <h2 class="font-semibold text-slate-200">SMS входящие</h2>
+    <button onclick="loadSMS()" class="btn-secondary text-xs py-1 px-3">Обновить</button>
+  </div>
+  <div id="sms-list">
+    <div class="text-slate-500 text-sm text-center py-4">Нажмите «Обновить» для загрузки SMS</div>
+  </div>
+</div>
+
+<!-- Send SMS -->
+<div class="card">
+  <h2 class="font-semibold text-slate-200 mb-3">Отправить SMS</h2>
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+    <div>
+      <label class="label text-xs">Номер телефона</label>
+      <input id="sms-number" type="tel" placeholder="+79001234567"
+             class="input-field font-mono text-sm">
+    </div>
+    <div class="sm:col-span-2">
+      <label class="label text-xs">Текст (до 160 символов)</label>
+      <textarea id="sms-text" rows="3" maxlength="160"
+                placeholder="Текст сообщения..."
+                class="input-field resize-none text-sm"></textarea>
+      <div class="text-right text-xs text-slate-600 mt-0.5">
+        <span id="sms-chars">0</span>/160
+      </div>
+    </div>
+  </div>
+  <button onclick="sendSMS()" class="btn-primary text-sm">Отправить SMS</button>
+  <span id="sms-send-result" class="ml-3 text-sm text-slate-400 hidden"></span>
+</div>
+
+<script>
+async function refreshDetail() {
+  const r = await fetch('/api/modem/detail');
+  const d = await r.json();
+  if (d.signal_pct !== null) {
+    const bar = document.getElementById('signal-bar');
+    if (bar) {
+      const color = d.signal_pct >= 60 ? 'text-green-400' : d.signal_pct >= 30 ? 'text-yellow-400' : 'text-red-400';
+      bar.innerHTML = `<span class="${color}">${d.signal_pct}%</span>`;
+    }
+  }
+}
+
+async function queryUSSD(code) {
+  code = code || document.getElementById('ussd-code').value.trim();
+  if (!code) return;
+  const el = document.getElementById('ussd-result');
+  el.textContent = 'Отправляю USSD…';
+  el.className = 'bg-slate-900/60 rounded p-3 text-sm font-mono text-slate-400 whitespace-pre-wrap';
+  const r = await fetch('/api/modem/ussd', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({code}),
+  });
+  const d = await r.json();
+  el.textContent = d.output || (d.ok ? 'OK (нет ответа)' : '✗ ' + d.error);
+  el.className = 'bg-slate-900/60 rounded p-3 text-sm font-mono ' +
+                 (d.ok ? 'text-green-300' : 'text-red-400') + ' whitespace-pre-wrap';
+}
+
+async function loadSMS() {
+  const container = document.getElementById('sms-list');
+  container.innerHTML = '<div class="text-slate-500 text-sm text-center py-4">Загружаю…</div>';
+  const r = await fetch('/api/modem/sms');
+  const msgs = await r.json();
+  if (!msgs.length) {
+    container.innerHTML = '<div class="text-slate-500 text-sm text-center py-4">Нет SMS</div>';
+    return;
+  }
+  container.innerHTML = msgs.map(m => `
+    <div class="py-2 border-b border-slate-700/60 last:border-0">
+      <div class="flex items-start justify-between gap-3">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2 mb-0.5 flex-wrap">
+            <span class="font-mono text-sm text-slate-200">${escHtml(m.number || '—')}</span>
+            <span class="text-xs text-slate-500">${escHtml(m.timestamp || '')}</span>
+            <span class="text-xs px-1.5 py-0.5 rounded ${m.direction === 'rx' ? 'bg-blue-900/40 text-blue-400' : 'bg-green-900/40 text-green-400'}">
+              ${m.direction === 'rx' ? '↓ вх' : '↑ исх'}
+            </span>
+          </div>
+          <div class="text-sm text-slate-300">${escHtml(m.text || '(пусто)')}</div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function sendSMS() {
+  const number = document.getElementById('sms-number').value.trim();
+  const text = document.getElementById('sms-text').value.trim();
+  const res = document.getElementById('sms-send-result');
+  if (!number || !text) { res.textContent = '⚠ Заполни номер и текст'; res.className='ml-3 text-sm text-yellow-400'; res.classList.remove('hidden'); return; }
+  res.textContent = 'Отправляю…';
+  res.className = 'ml-3 text-sm text-slate-400';
+  res.classList.remove('hidden');
+  const r = await fetch('/api/modem/sms/send', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({number, text}),
+  });
+  const d = await r.json();
+  res.textContent = d.ok ? '✓ Отправлено' : '✗ ' + (d.error || d.output || 'Ошибка');
+  res.className = 'ml-3 text-sm ' + (d.ok ? 'text-green-400' : 'text-red-400');
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+document.getElementById('sms-text').addEventListener('input', function() {
+  document.getElementById('sms-chars').textContent = this.value.length;
+});
+</script>
+{% endblock %}

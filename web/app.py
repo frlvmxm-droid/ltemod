@@ -14,7 +14,9 @@ from auth import login_required, check_password, get_or_create_secret_key
 from config import read_conf, write_conf, ALLOWED_KEYS
 from status import (get_full_status, get_vpn_status, get_bypass_status,
                     get_dhcp_leases, get_static_leases, get_port_forwards,
-                    get_traffic_data, get_ddns_status)
+                    get_traffic_data, get_ddns_status,
+                    get_modem_detail, get_sms_list,
+                    get_watchdog_state, get_desync_state, get_awg_profile)
 from dpi import detect as dpi_detect, load_cached as dpi_load_cached, save_result as dpi_save, BLOCK_LABELS
 
 SCRIPT_DIR = "/usr/local/bin/ltemod"
@@ -686,10 +688,100 @@ def api_desync_apply():
 @app.route("/api/desync/status")
 @login_required
 def api_desync_status():
-    from pathlib import Path
-    mode_file = Path("/run/ltemod/desync_mode")
-    mode = mode_file.read_text().strip() if mode_file.exists() else "off"
-    return jsonify({"mode": mode})
+    return jsonify({"mode": get_desync_state()})
+
+
+# ── Modem page ────────────────────────────────────────────────────────────────
+
+@app.route("/modem")
+@login_required
+def modem_page():
+    conf = read_conf()
+    return render_template("modem.html", config=conf, modem=get_modem_detail())
+
+
+@app.route("/api/modem/detail")
+@login_required
+def api_modem_detail():
+    return jsonify(get_modem_detail())
+
+
+@app.route("/api/modem/ussd", methods=["POST"])
+@login_required
+def api_modem_ussd():
+    data = request.get_json(force=True) or {}
+    code = data.get("code", "").strip()
+    if not re.match(r'^[\*#0-9]+[#]?$', code):
+        return jsonify({"ok": False, "error": "invalid USSD code"}), 400
+    rc, out, err = run_script("sms.sh", "ussd", code, timeout=30)
+    return jsonify({"ok": rc == 0, "output": (out + err).strip()})
+
+
+@app.route("/api/modem/sms", methods=["GET"])
+@login_required
+def api_modem_sms_list():
+    return jsonify(get_sms_list())
+
+
+@app.route("/api/modem/sms/send", methods=["POST"])
+@login_required
+def api_modem_sms_send():
+    data = request.get_json(force=True) or {}
+    number = data.get("number", "").strip()
+    text = data.get("text", "").strip()[:160]
+    if not number or not text:
+        return jsonify({"ok": False, "error": "number and text required"}), 400
+    if not re.match(r'^\+?[0-9]{7,15}$', number):
+        return jsonify({"ok": False, "error": "invalid phone number"}), 400
+    rc, out, err = run_script("sms.sh", "send", number, text, timeout=30)
+    return jsonify({"ok": rc == 0, "output": (out + err).strip()})
+
+
+# ── Diagnostics page ──────────────────────────────────────────────────────────
+
+@app.route("/diagnostics")
+@login_required
+def diagnostics():
+    return render_template("diagnostics.html",
+                           watchdog=get_watchdog_state(),
+                           desync=get_desync_state(),
+                           awg_profile=get_awg_profile())
+
+
+@app.route("/api/diagnostics/doctor", methods=["POST"])
+@login_required
+def api_diagnostics_doctor():
+    rc, out, err = run_script("ltemod-doctor.sh", timeout=30)
+    return jsonify({"ok": rc == 0, "output": (out + err).strip()})
+
+
+@app.route("/api/diagnostics/hardware", methods=["POST"])
+@login_required
+def api_diagnostics_hardware():
+    rc, out, err = run_script("detect-hardware.sh", timeout=15)
+    return jsonify({"ok": rc == 0, "output": (out + err).strip()})
+
+
+@app.route("/api/diagnostics/sim", methods=["POST"])
+@login_required
+def api_diagnostics_sim():
+    rc, out, err = run_script("detect-sim.sh", timeout=20)
+    return jsonify({"ok": rc == 0, "output": (out + err).strip()})
+
+
+@app.route("/api/diagnostics/journal")
+@login_required
+def api_diagnostics_journal():
+    try:
+        r = subprocess.run(
+            ["journalctl", "-t", "ltemod", "-t", "ltemod-watchdog",
+             "-t", "ltemod-ddns", "-t", "ltemod-desync",
+             "-n", "80", "--no-pager", "--output=short-iso"],
+            capture_output=True, text=True, timeout=5,
+        )
+        return jsonify({"ok": True, "lines": r.stdout.strip().splitlines()[-80:]})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e), "lines": []})
 
 
 if __name__ == "__main__":

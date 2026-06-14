@@ -165,6 +165,34 @@
 <!-- Internet status banner -->
 <div id="internet-banner" class="mt-4 hidden"></div>
 
+<!-- Protection status card -->
+<div class="card mt-4">
+  <div class="flex items-center justify-between mb-3">
+    <h2 class="font-semibold text-slate-200 flex items-center gap-2">
+      <span>🛡</span> Защита от блокировок
+    </h2>
+    <a href="/dpi" class="text-xs text-blue-400 hover:text-blue-300">DPI →</a>
+  </div>
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    <div class="bg-slate-900/40 rounded p-2 text-center">
+      <div class="text-xs text-slate-500 mb-1">DPI</div>
+      <div id="prot-dpi" class="text-sm font-mono text-slate-400">—</div>
+    </div>
+    <div class="bg-slate-900/40 rounded p-2 text-center">
+      <div class="text-xs text-slate-500 mb-1">TCP Desync</div>
+      <div id="prot-desync" class="text-sm font-mono text-slate-400">—</div>
+    </div>
+    <div class="bg-slate-900/40 rounded p-2 text-center">
+      <div class="text-xs text-slate-500 mb-1">AWG профиль</div>
+      <div id="prot-awg" class="text-sm font-mono text-slate-400">—</div>
+    </div>
+    <div class="bg-slate-900/40 rounded p-2 text-center">
+      <div class="text-xs text-slate-500 mb-1">Watchdog</div>
+      <div id="prot-watchdog" class="text-sm font-mono text-slate-400">—</div>
+    </div>
+  </div>
+</div>
+
 <!-- Traffic mini-chart -->
 <div class="card mt-4">
   <div class="flex items-center justify-between mb-3">
@@ -290,6 +318,27 @@ function renderStatus(d) {
     banner.classList.add('hidden');
   }
 
+  // Protection widget
+  const wdState = d.system?.watchdog_state || 'unknown';
+  const desyncMode = d.system?.desync_mode || 'off';
+  const awgProf = d.system?.awg_profile || '—';
+  const wdEl = document.getElementById('prot-watchdog');
+  if (wdEl) {
+    wdEl.textContent = wdState;
+    wdEl.className = 'text-sm font-mono ' + (
+      wdState === 'healthy' ? 'text-green-400' :
+      wdState === 'degraded' ? 'text-yellow-400' :
+      wdState === 'probing' ? 'text-orange-400' : 'text-slate-500'
+    );
+  }
+  const dsEl = document.getElementById('prot-desync');
+  if (dsEl) {
+    dsEl.textContent = desyncMode === 'off' ? 'выкл' : desyncMode;
+    dsEl.className = 'text-sm font-mono ' + (desyncMode !== 'off' ? 'text-green-400' : 'text-slate-500');
+  }
+  const awEl = document.getElementById('prot-awg');
+  if (awEl) { awEl.textContent = awgProf; awEl.className = 'text-sm font-mono ' + (awgProf !== '—' ? 'text-blue-400' : 'text-slate-500'); }
+
   // Timestamp
   const dot = document.getElementById('dot');
   dot.className = 'w-2 h-2 rounded-full ' + (uplinkUp ? 'bg-green-400' : 'bg-red-400');
@@ -373,8 +422,34 @@ async function loadMiniTraffic() {
   } catch(e) {}
 }
 
+async function loadDpiStatus() {
+  try {
+    const r = await fetch('/api/dpi/status');
+    const d = await r.json();
+    const el = document.getElementById('prot-dpi');
+    if (!el) return;
+    if (d.result) {
+      const typeMap = {
+        none: ['нет', 'text-green-400'],
+        dns:  ['DNS', 'text-red-400'],
+        tcp:  ['TCP', 'text-red-400'],
+        http: ['HTTP', 'text-red-400'],
+        tls:  ['TLS/ТСПУ', 'text-yellow-400'],
+        protocol: ['VPN-sig', 'text-red-400'],
+      };
+      const [label, color] = typeMap[d.result.block_type] || ['?', 'text-slate-400'];
+      el.textContent = label;
+      el.className = 'text-sm font-mono ' + color;
+    } else {
+      el.textContent = 'не проверен';
+      el.className = 'text-sm font-mono text-slate-500';
+    }
+  } catch(e) {}
+}
+
 refresh();
 loadMiniTraffic();
+loadDpiStatus();
 setInterval(refresh, POLL_MS);
 </script>
 {% endblock %}

@@ -36,6 +36,7 @@
         </div>
         <div class="flex items-center gap-1 flex-wrap">
           <a href="/dashboard" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">Dashboard</a>
+          <a href="/modem" class="nav-link {% if request.endpoint == 'modem_page' %}active{% endif %}">Модем</a>
           <a href="/lte-wifi" class="nav-link {% if request.endpoint == 'lte_wifi' %}active{% endif %}">LTE + WiFi</a>
           <a href="/clients" class="nav-link {% if request.endpoint == 'clients' %}active{% endif %}">Клиенты</a>
           <a href="/firewall" class="nav-link {% if request.endpoint == 'firewall' %}active{% endif %}">Firewall</a>
@@ -44,6 +45,7 @@
           <a href="/bypass" class="nav-link {% if request.endpoint == 'bypass' %}active{% endif %}">Bypass</a>
           <a href="/dpi" class="nav-link {% if request.endpoint == 'dpi_page' %}active{% endif %}">DPI</a>
           <a href="/settings" class="nav-link {% if request.endpoint == 'settings' %}active{% endif %}">Настройки</a>
+          <a href="/diagnostics" class="nav-link {% if request.endpoint == 'diagnostics' %}active{% endif %}">Диагностика</a>
           <a href="/logout" class="nav-link text-slate-500 hover:text-red-400 ml-2">Выйти</a>
         </div>
       </div>

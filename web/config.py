@@ -26,6 +26,10 @@ ALLOWED_KEYS = {
     "DDNS_ZONE_ID", "DDNS_USERNAME",
     # WAN Failover
     "FAILOVER_ENABLED",
+    # TCP Desync (DPI bypass)
+    "DESYNC_ENABLED", "DESYNC_MODE", "DESYNC_PORTS", "DESYNC_MSS", "DESYNC_TTL",
+    # AmneziaWG obfuscation profile
+    "AWG_PROFILE",
 }
 
 # Matches: KEY="value" or KEY=value (no spaces in value, optional trailing comment)

@@ -15,6 +15,7 @@ from config import read_conf, write_conf, ALLOWED_KEYS
 from status import (get_full_status, get_vpn_status, get_bypass_status,
                     get_dhcp_leases, get_static_leases, get_port_forwards,
                     get_traffic_data, get_ddns_status)
+from dpi import detect as dpi_detect, load_cached as dpi_load_cached, save_result as dpi_save, BLOCK_LABELS
 
 SCRIPT_DIR = "/usr/local/bin/ltemod"
 CONF_FILE = "/etc/ltemod/ltemod.conf"
@@ -525,11 +526,13 @@ def settings():
         if action == "save":
             updates = {}
             for k in ("DNS_MODE", "DNS_SERVER", "DDNS_PROVIDER",
-                      "DDNS_DOMAIN", "DDNS_TOKEN", "DDNS_ZONE_ID", "DDNS_USERNAME"):
+                      "DDNS_DOMAIN", "DDNS_TOKEN", "DDNS_ZONE_ID", "DDNS_USERNAME",
+                      "DESYNC_MODE", "DESYNC_PORTS", "DESYNC_MSS", "DESYNC_TTL"):
                 if k in request.form:
                     updates[k] = request.form[k]
             updates["DDNS_ENABLED"] = "yes" if request.form.get("DDNS_ENABLED") else "no"
             updates["FAILOVER_ENABLED"] = "yes" if request.form.get("FAILOVER_ENABLED") else "no"
+            updates["DESYNC_ENABLED"] = "yes" if request.form.get("DESYNC_ENABLED") else "no"
             try:
                 write_conf(updates)
                 flash("Настройки сохранены", "success")
@@ -595,6 +598,98 @@ def api_restore():
 @login_required
 def api_ddns_status():
     return jsonify(get_ddns_status())
+
+
+# ── DPI Detection ─────────────────────────────────────────────────────────────
+
+_dpi_running = False
+_dpi_lock = threading.Lock()
+
+
+@app.route("/dpi")
+@login_required
+def dpi_page():
+    cached = dpi_load_cached()
+    return render_template("dpi.html", result=cached, labels=BLOCK_LABELS)
+
+
+@app.route("/api/dpi/detect", methods=["POST"])
+@login_required
+def api_dpi_detect():
+    global _dpi_running
+    with _dpi_lock:
+        if _dpi_running:
+            return jsonify({"ok": False, "error": "Проверка уже выполняется"}), 409
+        _dpi_running = True
+
+    def _run():
+        global _dpi_running
+        try:
+            r = dpi_detect()
+            dpi_save(r)
+        finally:
+            with _dpi_lock:
+                _dpi_running = False
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"ok": True, "message": "Проверка DPI запущена (~10-30 сек)"})
+
+
+@app.route("/api/dpi/status")
+@login_required
+def api_dpi_status():
+    cached = dpi_load_cached()
+    running = _dpi_running
+    if cached is None:
+        return jsonify({"running": running, "result": None})
+    return jsonify({"running": running, "result": cached})
+
+
+# ── AWG Obfuscation Profiles ──────────────────────────────────────────────────
+
+@app.route("/api/awg/profile", methods=["POST"])
+@login_required
+def api_awg_profile():
+    data = request.get_json(force=True) or {}
+    profile = data.get("profile", "").strip()
+    if profile not in ("mild", "moderate", "aggressive"):
+        return jsonify({"ok": False, "error": "profile must be mild/moderate/aggressive"}), 400
+
+    rc, out, err = run_script("setup-awg-profiles.sh", "apply", profile, timeout=30)
+    if rc != 0:
+        return jsonify({"ok": False, "error": err or out}), 500
+
+    try:
+        write_conf({"AWG_PROFILE": profile})
+    except Exception:
+        pass
+
+    return jsonify({"ok": True, "profile": profile, "output": out})
+
+
+# ── TCP Desync ────────────────────────────────────────────────────────────────
+
+@app.route("/api/desync/apply", methods=["POST"])
+@login_required
+def api_desync_apply():
+    conf = read_conf()
+    enabled = conf.get("DESYNC_ENABLED", "no") == "yes"
+    if not enabled:
+        run_script("setup-desync.sh", "stop", timeout=15)
+        return jsonify({"ok": True, "message": "Desync выключен"})
+    rc, out, err = run_script("setup-desync.sh", "start", timeout=30)
+    if rc != 0:
+        return jsonify({"ok": False, "error": err or out}), 500
+    return jsonify({"ok": True, "output": out})
+
+
+@app.route("/api/desync/status")
+@login_required
+def api_desync_status():
+    from pathlib import Path
+    mode_file = Path("/run/ltemod/desync_mode")
+    mode = mode_file.read_text().strip() if mode_file.exists() else "off"
+    return jsonify({"mode": mode})
 
 
 if __name__ == "__main__":

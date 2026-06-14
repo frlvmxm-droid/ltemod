@@ -126,6 +126,62 @@
     </div>
   </div>
 
+  <!-- TCP Desync -->
+  <div class="card">
+    <h2 class="text-lg font-semibold text-white mb-1">TCP Desync (обход DPI)</h2>
+    <p class="text-slate-400 text-sm mb-4">
+      Техника TCP desynchronization обманывает DPI без VPN: MSS clamping, RST-drop или nfqws/zapret.
+      Работает с HTTP/HTTPS трафиком.
+    </p>
+    <label class="flex items-center gap-2 mb-4 cursor-pointer">
+      <input type="checkbox" name="DESYNC_ENABLED" value="yes"
+             {% if config.get('DESYNC_ENABLED','no') == 'yes' %}checked{% endif %}
+             class="w-4 h-4 accent-blue-500" onchange="toggleDesync(this.checked)">
+      <span class="text-sm text-slate-200">Включить TCP Desync</span>
+    </label>
+    <div id="desync-fields" class="{% if config.get('DESYNC_ENABLED','no') != 'yes' %}hidden{% endif %} space-y-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="label">Режим</label>
+          <select name="DESYNC_MODE" class="input-field">
+            {% set dm = config.get('DESYNC_MODE','auto') %}
+            <option value="auto"       {% if dm == 'auto'     %}selected{% endif %}>auto (рекомендуется)</option>
+            <option value="nfqws"      {% if dm == 'nfqws'    %}selected{% endif %}>nfqws / zapret</option>
+            <option value="mss"        {% if dm == 'mss'      %}selected{% endif %}>MSS clamping</option>
+            <option value="rst-drop"   {% if dm == 'rst-drop' %}selected{% endif %}>RST drop</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">Порты <span class="text-slate-500 font-normal">(через запятую)</span></label>
+          <input type="text" name="DESYNC_PORTS"
+                 value="{{ config.get('DESYNC_PORTS','80,443') }}"
+                 placeholder="80,443"
+                 class="input-field font-mono text-sm">
+        </div>
+        <div>
+          <label class="label">MSS <span class="text-slate-500 font-normal">(режим mss)</span></label>
+          <input type="number" name="DESYNC_MSS"
+                 value="{{ config.get('DESYNC_MSS','88') }}"
+                 min="40" max="1460"
+                 class="input-field font-mono text-sm w-28">
+        </div>
+        <div>
+          <label class="label">Fake TTL <span class="text-slate-500 font-normal">(nfqws)</span></label>
+          <input type="number" name="DESYNC_TTL"
+                 value="{{ config.get('DESYNC_TTL','5') }}"
+                 min="1" max="64"
+                 class="input-field font-mono text-sm w-28">
+        </div>
+      </div>
+      <div class="flex gap-3">
+        <button type="button" onclick="applyDesync()" class="btn-secondary text-sm">
+          Применить Desync сейчас
+        </button>
+        <span id="desync-msg" class="text-sm text-slate-400 hidden self-center"></span>
+      </div>
+    </div>
+  </div>
+
   <!-- WAN Failover -->
   <div class="card">
     <h2 class="text-lg font-semibold text-white mb-1">WAN Failover</h2>
@@ -194,6 +250,19 @@ function toggleDdns(checked) {
 function toggleDdnsProvider(val) {
   document.getElementById('ddns-zone-row').classList.toggle('hidden', val !== 'cloudflare');
   document.getElementById('ddns-user-row').classList.toggle('hidden', val !== 'noip');
+}
+function toggleDesync(checked) {
+  document.getElementById('desync-fields').classList.toggle('hidden', !checked);
+}
+async function applyDesync() {
+  const msg = document.getElementById('desync-msg');
+  msg.textContent = 'Применяю…';
+  msg.className = 'text-sm text-slate-400 self-center';
+  msg.classList.remove('hidden');
+  const r = await fetch('/api/desync/apply', {method:'POST'});
+  const d = await r.json();
+  msg.textContent = d.ok ? '✓ ' + (d.message || 'Применено') : '✗ ' + (d.error || 'Ошибка');
+  msg.className = 'text-sm self-center ' + (d.ok ? 'text-green-400' : 'text-red-400');
 }
 
 async function doRestore(e) {

@@ -1,0 +1,18 @@
+[Unit]
+Description=ltemod TCP Desync (DPI bypass)
+After=network-online.target lte-modem.service
+Wants=network-online.target
+ConditionPathExists=/etc/ltemod/ltemod.conf
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/ltemod/setup-desync.sh start
+ExecStop=/usr/local/bin/ltemod/setup-desync.sh stop
+EnvironmentFile=-/etc/ltemod/ltemod.conf
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ltemod-desync
+
+[Install]
+WantedBy=multi-user.target

@@ -69,6 +69,20 @@
       <button onclick="toggleVPN('amnezia','off')" id="btn-amn-off"
               class="btn-danger text-xs py-1 px-3 flex-1" {% if not vpn.amnezia.up %}disabled{% endif %}>Выкл</button>
     </div>
+    <!-- AWG obfuscation profile -->
+    <div class="mt-3 pt-3 border-t border-slate-700">
+      <div class="text-xs text-slate-400 mb-2">Профиль обфускации:</div>
+      <div class="flex gap-1 flex-wrap">
+        {% set awg_profile = config.get('AWG_PROFILE','moderate') %}
+        {% for prof, label, color in [('mild','Мягкий','btn-secondary'),('moderate','Средний','btn-secondary'),('aggressive','Макс','btn-danger')] %}
+        <button onclick="applyAWGProfile('{{ prof }}')" id="awg-{{ prof }}"
+                class="{{ color }} text-xs py-1 px-2 {% if awg_profile == prof %}ring-2 ring-blue-400{% endif %}">
+          {{ label }}
+        </button>
+        {% endfor %}
+      </div>
+      <p id="awg-profile-msg" class="text-xs text-slate-400 mt-1 hidden"></p>
+    </div>
     <form method="POST" action="/vpn/upload" class="mt-3 pt-3 border-t border-slate-700" enctype="multipart/form-data">
       <input type="hidden" name="proto" value="amnezia">
       <label class="label text-xs">Загрузить конфиг (.conf)</label>
@@ -224,6 +238,36 @@ async function saveVPNSettings() {
     msg.textContent = '✗ Ошибка сети';
     msg.className = 'ml-3 text-sm text-red-400';
     msg.classList.remove('hidden');
+  }
+}
+
+async function applyAWGProfile(profile) {
+  const msg = document.getElementById('awg-profile-msg');
+  msg.textContent = `Применяю профиль "${profile}"…`;
+  msg.className = 'text-xs text-slate-400 mt-1';
+  msg.classList.remove('hidden');
+  try {
+    const r = await fetch('/api/awg/profile', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({profile}),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      msg.textContent = `✓ Профиль "${profile}" применён`;
+      msg.className = 'text-xs text-green-400 mt-1';
+      ['mild','moderate','aggressive'].forEach(p => {
+        const btn = document.getElementById('awg-' + p);
+        if (btn) btn.classList.toggle('ring-2', p === profile);
+        if (btn) btn.classList.toggle('ring-blue-400', p === profile);
+      });
+    } else {
+      msg.textContent = `✗ ${d.error || 'Ошибка'}`;
+      msg.className = 'text-xs text-red-400 mt-1';
+    }
+  } catch(e) {
+    msg.textContent = '✗ Ошибка сети';
+    msg.className = 'text-xs text-red-400 mt-1';
   }
 }
 

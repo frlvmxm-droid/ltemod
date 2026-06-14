@@ -231,6 +231,8 @@ install -m 755 "$SCRIPT_DIR/network/setup-uplink.sh"          "$INSTALL_BIN/setu
 install -m 755 "$SCRIPT_DIR/network/setup-portfwd.sh"         "$INSTALL_BIN/setup-portfwd.sh"
 install -m 755 "$SCRIPT_DIR/network/setup-ddns.sh"            "$INSTALL_BIN/setup-ddns.sh"
 install -m 755 "$SCRIPT_DIR/network/setup-dns.sh"             "$INSTALL_BIN/setup-dns.sh"
+install -m 755 "$SCRIPT_DIR/network/setup-desync.sh"          "$INSTALL_BIN/setup-desync.sh"
+install -m 755 "$SCRIPT_DIR/network/setup-awg-profiles.sh"    "$INSTALL_BIN/setup-awg-profiles.sh"
 install -m 755 "$SCRIPT_DIR/network/vpn-toggle.sh"            "$INSTALL_BIN/vpn-toggle.sh"
 install -m 755 "$SCRIPT_DIR/network/killswitch.sh"            "$INSTALL_BIN/killswitch.sh"
 install -m 755 "$SCRIPT_DIR/network/bypass-routing.sh"        "$INSTALL_BIN/bypass-routing.sh"
@@ -259,6 +261,7 @@ ok "Scripts installed to $INSTALL_BIN"
 # Симлинки
 for cmd in vpn-toggle modem-status setup-vpn setup-amnezia setup-vless setup-ap \
            setup-wifi-client setup-uplink setup-portfwd setup-ddns setup-dns \
+           setup-desync setup-awg-profiles \
            detect-hardware detect-sim ltemod-doctor vpn-profile \
            killswitch data-usage sms bypass-routing list-manager; do
     target="/usr/local/bin/${cmd}"
@@ -330,6 +333,7 @@ install -m 644 "$SCRIPT_DIR/systemd/sing-box.service"              "$INSTALL_SYS
 install -m 644 "$SCRIPT_DIR/systemd/ltemod-web.service"            "$INSTALL_SYSTEMD/ltemod-web.service"
 install -m 644 "$SCRIPT_DIR/systemd/ltemod-ddns.service"           "$INSTALL_SYSTEMD/ltemod-ddns.service"
 install -m 644 "$SCRIPT_DIR/systemd/ltemod-ddns.timer"             "$INSTALL_SYSTEMD/ltemod-ddns.timer"
+install -m 644 "$SCRIPT_DIR/systemd/ltemod-desync.service"         "$INSTALL_SYSTEMD/ltemod-desync.service"
 ok "Systemd units installed"
 
 systemctl daemon-reload
@@ -345,6 +349,10 @@ ok "ltemod-bypass-update.timer enabled (daily at 04:00)"
 # По умолчанию не включаем — чтобы не мешать при DDNS_ENABLED=no
 info "ltemod-ddns.timer: включи вручную при DDNS_ENABLED=yes"
 info "  sudo systemctl enable --now ltemod-ddns.timer"
+
+# Desync сервис включается только если DESYNC_ENABLED=yes
+info "ltemod-desync.service: включи вручную при DESYNC_ENABLED=yes"
+info "  sudo systemctl enable --now ltemod-desync.service"
 
 systemctl enable lte-modem.service
 ok "lte-modem.service enabled"
@@ -384,6 +392,7 @@ install -m 644 "$SCRIPT_DIR/web/app.py"    "$WEB_LIB/app.py"
 install -m 644 "$SCRIPT_DIR/web/auth.py"   "$WEB_LIB/auth.py"
 install -m 644 "$SCRIPT_DIR/web/config.py" "$WEB_LIB/config.py"
 install -m 644 "$SCRIPT_DIR/web/status.py" "$WEB_LIB/status.py"
+install -m 644 "$SCRIPT_DIR/web/dpi.py"    "$WEB_LIB/dpi.py"
 mkdir -p "$WEB_LIB/templates"
 cp -r "$SCRIPT_DIR/web/templates/"* "$WEB_LIB/templates/"
 chmod 644 "$WEB_LIB/templates/"*.html

@@ -26,6 +26,11 @@ UPLINK_PRIORITY="${UPLINK_PRIORITY:-lte wifi eth}"
 FAILOVER_ENABLED="${FAILOVER_ENABLED:-yes}"
 NM_CON_NAME="${NM_CON_NAME:-lte-connection}"
 LOG_TAG="${LOG_TAG:-ltemod}"
+WATCHDOG_STATE_FILE="${RUNTIME_DIR}/watchdog_state"
+DEGRADED_THRESHOLD="${DEGRADED_THRESHOLD:-1}"
+
+get_watchdog_state() { [[ -f "$WATCHDOG_STATE_FILE" ]] && cat "$WATCHDOG_STATE_FILE" || echo "healthy"; }
+set_watchdog_state() { echo "$1" > "$WATCHDOG_STATE_FILE"; }
 
 log() {
     logger -t "${LOG_TAG}-watchdog" "$*"
@@ -303,6 +308,7 @@ fi
 if $uplink_ok && check_internet; then
     log "Connectivity OK (ping $PING_HOST successful via $uplink_iface)"
     reset_counter
+    set_watchdog_state "healthy"
     log "Watchdog check passed"
     exit 0
 fi
@@ -313,6 +319,14 @@ counter=$((counter + 1))
 set_counter "$counter"
 
 log_err "Connectivity FAILED (attempt $counter/$MAX_RECONNECT_ATTEMPTS, uplink: $uplink_iface)"
+
+# DEGRADED: первые $DEGRADED_THRESHOLD сбоев — фиксируем деградацию, не реконнектим
+if [[ $counter -le $DEGRADED_THRESHOLD ]]; then
+    set_watchdog_state "degraded"
+    log_err "State → DEGRADED (temporary glitch? waiting for next cycle)"
+    exit 1
+fi
+set_watchdog_state "probing"
 
 if [[ $counter -ge $MAX_RECONNECT_ATTEMPTS ]]; then
     log_err "Max reconnection attempts ($MAX_RECONNECT_ATTEMPTS) reached!"

@@ -315,6 +315,65 @@ def api_ap_restart():
     return jsonify({"ok": rc == 0, "error": err if rc != 0 else None})
 
 
+@app.route("/api/wifi/scan")
+@login_required
+def api_wifi_scan():
+    conf = read_conf()
+    ap_iface = conf.get("WIFI_AP_IFACE", "wlan0")
+    wc_iface = conf.get("WIFI_CLIENT_IFACE", "wlan1")
+
+    # Use wlan1 (STA iface) if up, otherwise scan on wlan0 (AP may allow passive scan)
+    scan_iface = wc_iface if _iface_exists(wc_iface) else ap_iface
+
+    networks = []
+    try:
+        # Force a fresh scan; parse terse output
+        r = subprocess.run(
+            ["nmcli", "--terse", "-f", "SSID,SIGNAL,SECURITY,CHAN,FREQ",
+             "dev", "wifi", "list", "ifname", scan_iface, "--rescan", "yes"],
+            capture_output=True, text=True, timeout=20,
+        )
+        seen: set = set()
+        for line in r.stdout.splitlines():
+            parts = line.split(":")
+            if len(parts) < 4:
+                continue
+            ssid = parts[0].strip()
+            if not ssid or ssid in seen:
+                continue
+            seen.add(ssid)
+            try:
+                signal = int(parts[1])
+            except ValueError:
+                signal = 0
+            security = parts[2].strip() or "Open"
+            chan = parts[3].strip()
+            freq_raw = parts[4].strip() if len(parts) > 4 else ""
+            freq_label = "2.4 GHz" if "2.4" in freq_raw or (freq_raw.isdigit() and int(freq_raw) < 3000) else "5 GHz"
+            networks.append({
+                "ssid": ssid,
+                "signal": signal,
+                "security": security,
+                "channel": chan,
+                "freq": freq_label,
+            })
+
+        # Sort by signal strength descending
+        networks.sort(key=lambda x: x["signal"], reverse=True)
+
+    except subprocess.TimeoutExpired:
+        return jsonify({"ok": False, "error": "Сканирование прервано по таймауту (20с)"}), 504
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+    return jsonify({"ok": True, "networks": networks, "iface": scan_iface})
+
+
+def _iface_exists(iface: str) -> bool:
+    from pathlib import Path
+    return Path(f"/sys/class/net/{iface}").exists()
+
+
 @app.route("/api/modem/reconnect", methods=["POST"])
 @login_required
 def api_modem_reconnect():

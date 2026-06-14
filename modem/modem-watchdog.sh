@@ -203,7 +203,12 @@ if [[ $counter -ge $MAX_RECONNECT_ATTEMPTS ]]; then
     log_err "Rebooting system to recover..."
     # Дать время записать лог
     sleep 2
-    /sbin/reboot
+    # systemctl reboot — стандартный путь на systemd; запасные варианты для надёжности
+    if command -v systemctl &>/dev/null; then
+        systemctl reboot || reboot || /sbin/reboot
+    else
+        reboot || /sbin/reboot
+    fi
     exit 1
 fi
 

@@ -109,7 +109,7 @@ download_url() {
 # ---------------------------------------------------------------------------
 load_file() {
     local file="$1"
-    local dnsmasq_lines_ref="$2"   # name of array to append dnsmasq lines to
+    local -n _dnsmasq_lines_ref="$2"   # nameref to array to append dnsmasq lines to
 
     [[ ! -f "$file" ]] && return 0
 
@@ -123,7 +123,7 @@ load_file() {
             # Replace any set name after last / with our set name
             local new_line
             new_line=$(echo "$line" | sed 's|/[^/]*$|/'"$IPSET_IP"'|')
-            eval "${dnsmasq_lines_ref}+=(\"\$new_line\")"
+            _dnsmasq_lines_ref+=("$new_line")
         done < "$file"
     else
         # Raw IP/CIDR: load into ipset

@@ -99,6 +99,25 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 1b. Модем / APN
+# ---------------------------------------------------------------------------
+section "LTE modem / APN"
+if [[ -z "${APN:-}" ]]; then
+    fail "APN не задан — LTE не подключится (run detect-sim --write или укажи APN вручную)"
+elif [[ "$APN" == "internet" ]]; then
+    # "internet" — рабочий дефолт только для части операторов (МегаФон и др.).
+    # Предупреждаем, чтобы пользователь проверил соответствие своей SIM.
+    warn "APN=\"internet\" (универсальный дефолт). Если оператор требует особый APN — run detect-sim --write (см. examples/operators/)"
+else
+    ok "APN=\"$APN\""
+fi
+if [[ "${MODEM_PROTO:-mbim}" =~ ^(mbim|qmi)$ ]]; then
+    ok "MODEM_PROTO=${MODEM_PROTO:-mbim}"
+else
+    fail "MODEM_PROTO='${MODEM_PROTO:-}' invalid — use: mbim | qmi"
+fi
+
+# ---------------------------------------------------------------------------
 # 2. WiFi AP — критичные проверки (часть исполняется и в --preflight)
 # ---------------------------------------------------------------------------
 section "WiFi Access Point"

@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+{% block title %}VPN — ltemod{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-xl font-semibold">VPN Управление</h1>
+  <div class="text-sm">
+    Автозапуск:
+    <span class="font-mono {% if config.get('VPN_PROTO','none') != 'none' %}text-blue-400{% else %}text-slate-500{% endif %}">
+      {{ config.get('VPN_PROTO', 'none') }}
+    </span>
+    &nbsp;|&nbsp; Активен:
+    <span class="font-mono {% if vpn.active_mode != 'direct' %}text-green-400{% else %}text-slate-500{% endif %}">
+      {{ vpn.active_mode }}
+    </span>
+  </div>
+</div>
+
+<!-- Protocol cards -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+
+  <!-- WireGuard -->
+  <div class="card border-2 {% if vpn.wg.up %}border-green-700{% else %}border-slate-700{% endif %}">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="font-semibold">WireGuard</h3>
+      <span class="{% if vpn.wg.up %}badge-up{% else %}badge-down{% endif %}">
+        {{ 'UP' if vpn.wg.up else 'DOWN' }}
+      </span>
+    </div>
+    {% if vpn.wg.up %}
+    <div class="text-xs text-slate-400 space-y-1 mb-3">
+      {% if vpn.wg.ip %}<div>IP: <span class="font-mono text-slate-200">{{ vpn.wg.ip }}</span></div>{% endif %}
+      {% if vpn.wg.handshake_age_sec is not none %}
+      <div>Рукопожатие: <span class="{% if vpn.wg.healthy %}text-green-400{% else %}text-yellow-400{% endif %}">
+        {{ vpn.wg.handshake_age_sec }}с назад
+      </span></div>
+      {% endif %}
+    </div>
+    {% endif %}
+    <div class="flex gap-2 mt-2">
+      <button onclick="toggleVPN('wg','on')" id="btn-wg-on"
+              class="btn-primary text-xs py-1 px-3 flex-1" {% if vpn.wg.up %}disabled{% endif %}>Вкл</button>
+      <button onclick="toggleVPN('wg','off')" id="btn-wg-off"
+              class="btn-danger text-xs py-1 px-3 flex-1" {% if not vpn.wg.up %}disabled{% endif %}>Выкл</button>
+    </div>
+    <form method="POST" action="/vpn/upload" class="mt-3 pt-3 border-t border-slate-700" enctype="multipart/form-data">
+      <input type="hidden" name="proto" value="wg">
+      <label class="label text-xs">Загрузить конфиг (.conf)</label>
+      <div class="flex gap-2">
+        <input type="file" name="vpnconfig" accept=".conf"
+               class="text-xs text-slate-400 flex-1 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-slate-700 file:text-slate-300 hover:file:bg-slate-600">
+        <button type="submit" class="btn-secondary text-xs py-1 px-2">↑</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- AmneziaWG -->
+  <div class="card border-2 {% if vpn.amnezia.up %}border-green-700{% else %}border-slate-700{% endif %}">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="font-semibold">AmneziaWG</h3>
+      <span class="{% if vpn.amnezia.up %}badge-up{% else %}badge-down{% endif %}">
+        {{ 'UP' if vpn.amnezia.up else 'DOWN' }}
+      </span>
+    </div>
+    <div class="text-xs text-slate-500 mb-3">Обфусцированный WireGuard</div>
+    <div class="flex gap-2 mt-2">
+      <button onclick="toggleVPN('amnezia','on')" id="btn-amn-on"
+              class="btn-primary text-xs py-1 px-3 flex-1" {% if vpn.amnezia.up %}disabled{% endif %}>Вкл</button>
+      <button onclick="toggleVPN('amnezia','off')" id="btn-amn-off"
+              class="btn-danger text-xs py-1 px-3 flex-1" {% if not vpn.amnezia.up %}disabled{% endif %}>Выкл</button>
+    </div>
+    <form method="POST" action="/vpn/upload" class="mt-3 pt-3 border-t border-slate-700" enctype="multipart/form-data">
+      <input type="hidden" name="proto" value="amnezia">
+      <label class="label text-xs">Загрузить конфиг (.conf)</label>
+      <div class="flex gap-2">
+        <input type="file" name="vpnconfig" accept=".conf"
+               class="text-xs text-slate-400 flex-1 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-slate-700 file:text-slate-300 hover:file:bg-slate-600">
+        <button type="submit" class="btn-secondary text-xs py-1 px-2">↑</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- VLESS -->
+  <div class="card border-2 {% if vpn.vless.tun_up %}border-green-700{% elif vpn.vless.running %}border-yellow-700{% else %}border-slate-700{% endif %}">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="font-semibold">VLESS</h3>
+      <span class="{% if vpn.vless.tun_up %}badge-up{% elif vpn.vless.running %}badge-warn{% else %}badge-down{% endif %}">
+        {% if vpn.vless.tun_up %}UP{% elif vpn.vless.running %}STARTING{% else %}DOWN{% endif %}
+      </span>
+    </div>
+    <div class="text-xs text-slate-500 mb-3">sing-box TUN режим</div>
+    <div class="flex gap-2 mt-2">
+      <button onclick="toggleVPN('vless','on')" id="btn-vless-on"
+              class="btn-primary text-xs py-1 px-3 flex-1" {% if vpn.vless.tun_up %}disabled{% endif %}>Вкл</button>
+      <button onclick="toggleVPN('vless','off')" id="btn-vless-off"
+              class="btn-danger text-xs py-1 px-3 flex-1" {% if not vpn.vless.running %}disabled{% endif %}>Выкл</button>
+    </div>
+    <form method="POST" action="/vpn/upload" class="mt-3 pt-3 border-t border-slate-700" enctype="multipart/form-data">
+      <input type="hidden" name="proto" value="vless">
+      <label class="label text-xs">Загрузить конфиг (.json)</label>
+      <div class="flex gap-2">
+        <input type="file" name="vpnconfig" accept=".json"
+               class="text-xs text-slate-400 flex-1 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-slate-700 file:text-slate-300 hover:file:bg-slate-600">
+        <button type="submit" class="btn-secondary text-xs py-1 px-2">↑</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- VPN Settings -->
+<form method="POST" action="/api/config" id="vpn-settings-form">
+<div class="card mb-4">
+  <h2 class="font-semibold text-slate-200 mb-4 pb-2 border-b border-slate-700">Настройки VPN</h2>
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div>
+      <label class="label" for="VPN_PROTO">Автозапуск при загрузке</label>
+      <select id="VPN_PROTO" name="VPN_PROTO" class="input-field">
+        <option value="none" {% if config.get('VPN_PROTO','none') == 'none' %}selected{% endif %}>Без VPN</option>
+        <option value="wg" {% if config.get('VPN_PROTO') == 'wg' %}selected{% endif %}>WireGuard</option>
+        <option value="amnezia" {% if config.get('VPN_PROTO') == 'amnezia' %}selected{% endif %}>AmneziaWG</option>
+        <option value="vless" {% if config.get('VPN_PROTO') == 'vless' %}selected{% endif %}>VLESS</option>
+      </select>
+    </div>
+    <div class="flex items-end gap-3">
+      <label class="flex items-center gap-2 cursor-pointer mb-2">
+        <input type="checkbox" id="VPN_KILLSWITCH" name="VPN_KILLSWITCH"
+               {% if config.get('VPN_KILLSWITCH','no') == 'yes' %}checked{% endif %}
+               class="w-4 h-4 accent-blue-500">
+        <span class="text-sm text-slate-300">Kill-switch</span>
+      </label>
+    </div>
+    <div class="flex items-end gap-3">
+      <label class="flex items-center gap-2 cursor-pointer mb-2">
+        <input type="checkbox" id="VPN_DNS_REDIRECT" name="VPN_DNS_REDIRECT"
+               {% if config.get('VPN_DNS_REDIRECT','no') == 'yes' %}checked{% endif %}
+               class="w-4 h-4 accent-blue-500">
+        <span class="text-sm text-slate-300">Перенаправлять DNS</span>
+      </label>
+    </div>
+  </div>
+  <div class="mt-4">
+    <button type="button" onclick="saveVPNSettings()" class="btn-primary">Сохранить настройки</button>
+    <span id="vpn-save-msg" class="ml-3 text-sm text-slate-400 hidden"></span>
+  </div>
+</div>
+</form>
+
+<!-- VPN Profiles -->
+{% if profiles %}
+<div class="card">
+  <h2 class="font-semibold text-slate-200 mb-3">Сохранённые профили</h2>
+  <div class="space-y-2">
+    {% for profile in profiles %}
+    <div class="flex items-center justify-between py-2 px-3 bg-slate-700/40 rounded">
+      <div>
+        <span class="font-mono text-sm text-slate-200">{{ profile.name }}</span>
+        {% if profile.get('PROTO') %}
+        <span class="ml-2 text-xs text-slate-500">{{ profile.PROTO }}</span>
+        {% endif %}
+      </div>
+      <button onclick="useProfile('{{ profile.name }}')" class="btn-secondary text-xs py-1 px-3">
+        Активировать
+      </button>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div id="vpn-op-status" class="mt-4 hidden"></div>
+
+<script>
+async function toggleVPN(proto, action) {
+  const status = document.getElementById('vpn-op-status');
+  status.className = 'mt-4 px-4 py-2 bg-blue-900/60 border border-blue-700 text-blue-300 rounded text-sm';
+  status.textContent = `${proto.toUpperCase()} ${action === 'on' ? 'включается' : 'выключается'}...`;
+  status.classList.remove('hidden');
+
+  const allBtns = document.querySelectorAll('button[id^="btn-"]');
+  allBtns.forEach(b => b.disabled = true);
+
+  try {
+    const r = await fetch('/api/vpn/toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ proto, action }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      status.className = 'mt-4 px-4 py-2 bg-green-900/60 border border-green-700 text-green-300 rounded text-sm';
+      status.textContent = `✓ ${proto.toUpperCase()} ${action === 'on' ? 'включён' : 'выключен'} (режим: ${d.mode})`;
+      setTimeout(() => location.reload(), 1500);
+    } else {
+      status.className = 'mt-4 px-4 py-2 bg-red-900/60 border border-red-700 text-red-300 rounded text-sm';
+      status.textContent = `✗ Ошибка: ${d.error || 'неизвестная ошибка'}`;
+      allBtns.forEach(b => b.disabled = false);
+    }
+  } catch(e) {
+    status.className = 'mt-4 px-4 py-2 bg-red-900/60 border border-red-700 text-red-300 rounded text-sm';
+    status.textContent = '✗ Ошибка сети';
+    allBtns.forEach(b => b.disabled = false);
+  }
+}
+
+async function saveVPNSettings() {
+  const msg = document.getElementById('vpn-save-msg');
+  const data = {
+    VPN_PROTO: document.getElementById('VPN_PROTO').value,
+    VPN_KILLSWITCH: document.getElementById('VPN_KILLSWITCH').checked ? 'yes' : 'no',
+    VPN_DNS_REDIRECT: document.getElementById('VPN_DNS_REDIRECT').checked ? 'yes' : 'no',
+  };
+  try {
+    const r = await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const d = await r.json();
+    msg.textContent = d.ok ? '✓ Сохранено' : '✗ ' + (d.error || 'ошибка');
+    msg.className = 'ml-3 text-sm ' + (d.ok ? 'text-green-400' : 'text-red-400');
+    msg.classList.remove('hidden');
+    setTimeout(() => msg.classList.add('hidden'), 3000);
+  } catch(e) {
+    msg.textContent = '✗ Ошибка сети';
+    msg.className = 'ml-3 text-sm text-red-400';
+    msg.classList.remove('hidden');
+  }
+}
+
+async function useProfile(name) {
+  const status = document.getElementById('vpn-op-status');
+  status.className = 'mt-4 px-4 py-2 bg-blue-900/60 border border-blue-700 text-blue-300 rounded text-sm';
+  status.textContent = `Активируется профиль "${name}"...`;
+  status.classList.remove('hidden');
+  try {
+    const r = await fetch('/api/vpn/profile/use', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      status.className = 'mt-4 px-4 py-2 bg-green-900/60 border border-green-700 text-green-300 rounded text-sm';
+      status.textContent = `✓ Профиль "${name}" активирован`;
+      setTimeout(() => location.reload(), 1500);
+    } else {
+      status.className = 'mt-4 px-4 py-2 bg-red-900/60 border border-red-700 text-red-300 rounded text-sm';
+      status.textContent = `✗ Ошибка: ${d.error}`;
+    }
+  } catch(e) {
+    status.textContent = '✗ Ошибка сети';
+  }
+}
+</script>
+{% endblock %}

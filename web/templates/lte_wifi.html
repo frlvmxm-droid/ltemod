@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}LTE + WiFi — ltemod{% endblock %}
+
+{% block content %}
+<h1 class="text-xl font-semibold mb-6">LTE + WiFi Настройки</h1>
+
+<form method="POST" action="/lte-wifi">
+
+  <!-- LTE Settings -->
+  <div class="card mb-4">
+    <h2 class="font-semibold text-slate-200 mb-4 pb-2 border-b border-slate-700">📡 LTE Модем</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+      <div>
+        <label class="label" for="APN">APN</label>
+        <input type="text" id="APN" name="APN" class="input-field"
+               value="{{ config.get('APN', '') }}" placeholder="internet.mts.ru">
+      </div>
+
+      <div>
+        <label class="label" for="MODEM_PROTO">Протокол подключения</label>
+        <select id="MODEM_PROTO" name="MODEM_PROTO" class="input-field">
+          <option value="mbim" {% if config.get('MODEM_PROTO','mbim') == 'mbim' %}selected{% endif %}>MBIM (рекомендуется)</option>
+          <option value="qmi" {% if config.get('MODEM_PROTO') == 'qmi' %}selected{% endif %}>QMI</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="label" for="APN_USER">APN Пользователь <span class="text-slate-500 font-normal">(необяз.)</span></label>
+        <input type="text" id="APN_USER" name="APN_USER" class="input-field"
+               value="{{ config.get('APN_USER', '') }}" placeholder="beeline">
+      </div>
+
+      <div>
+        <label class="label" for="APN_PASS">APN Пароль <span class="text-slate-500 font-normal">(необяз.)</span></label>
+        <input type="text" id="APN_PASS" name="APN_PASS" class="input-field"
+               value="{{ config.get('APN_PASS', '') }}" placeholder="beeline">
+      </div>
+
+      <div>
+        <label class="label" for="WWAN_IFACE">WWAN Интерфейс</label>
+        <input type="text" id="WWAN_IFACE" name="WWAN_IFACE" class="input-field"
+               value="{{ config.get('WWAN_IFACE', 'wwan0') }}" placeholder="wwan0">
+      </div>
+
+      <div>
+        <label class="label" for="USSD_BALANCE_CODE">USSD Баланс</label>
+        <input type="text" id="USSD_BALANCE_CODE" name="USSD_BALANCE_CODE" class="input-field"
+               value="{{ config.get('USSD_BALANCE_CODE', '') }}" placeholder="*100#">
+      </div>
+
+    </div>
+
+    <div class="mt-4 p-3 bg-slate-700/40 rounded text-xs text-slate-400">
+      <strong class="text-slate-300">Автоопределение APN:</strong>
+      Запустите <code class="font-mono bg-slate-700 px-1 rounded">sudo detect-sim --write</code>
+      в терминале для автоматической настройки APN по SIM-карте.
+    </div>
+  </div>
+
+  <!-- WiFi AP Settings -->
+  <div class="card mb-4">
+    <div class="flex items-center justify-between mb-4 pb-2 border-b border-slate-700">
+      <h2 class="font-semibold text-slate-200">📶 WiFi Точка Доступа</h2>
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" id="WIFI_AP_ENABLED" name="WIFI_AP_ENABLED"
+               {% if config.get('WIFI_AP_ENABLED','no') == 'yes' %}checked{% endif %}
+               class="w-4 h-4 accent-blue-500">
+        <span class="text-sm text-slate-300">Включена</span>
+      </label>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+      <div>
+        <label class="label" for="WIFI_AP_SSID">Название сети (SSID)</label>
+        <input type="text" id="WIFI_AP_SSID" name="WIFI_AP_SSID" class="input-field"
+               value="{{ config.get('WIFI_AP_SSID', '') }}" placeholder="MyRouter">
+      </div>
+
+      <div>
+        <label class="label" for="WIFI_AP_PASSWORD">Пароль WiFi <span class="text-slate-500 font-normal">(8–63 симв.)</span></label>
+        <input type="text" id="WIFI_AP_PASSWORD" name="WIFI_AP_PASSWORD" class="input-field"
+               value="{{ config.get('WIFI_AP_PASSWORD', '') }}" placeholder="минимум 8 символов">
+      </div>
+
+      <div>
+        <label class="label" for="WIFI_AP_BAND">Диапазон</label>
+        <select id="WIFI_AP_BAND" name="WIFI_AP_BAND" class="input-field">
+          <option value="2g" {% if config.get('WIFI_AP_BAND','2g') == '2g' %}selected{% endif %}>2.4 GHz</option>
+          <option value="5g" {% if config.get('WIFI_AP_BAND') == '5g' %}selected{% endif %}>5 GHz</option>
+          <option value="both" {% if config.get('WIFI_AP_BAND') == 'both' %}selected{% endif %}>Оба диапазона</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="label" for="WIFI_AP_IP">IP адрес роутера</label>
+        <input type="text" id="WIFI_AP_IP" name="WIFI_AP_IP" class="input-field"
+               value="{{ config.get('WIFI_AP_IP', '192.168.10.1') }}" placeholder="192.168.10.1">
+      </div>
+
+      <div>
+        <label class="label" for="WIFI_AP_CHANNEL_2G">Канал 2.4 GHz</label>
+        <input type="number" id="WIFI_AP_CHANNEL_2G" name="WIFI_AP_CHANNEL_2G" class="input-field"
+               value="{{ config.get('WIFI_AP_CHANNEL_2G', '6') }}" min="1" max="14">
+      </div>
+
+      <div>
+        <label class="label" for="WIFI_AP_CHANNEL_5G">Канал 5 GHz</label>
+        <input type="number" id="WIFI_AP_CHANNEL_5G" name="WIFI_AP_CHANNEL_5G" class="input-field"
+               value="{{ config.get('WIFI_AP_CHANNEL_5G', '36') }}" min="36" max="165">
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="flex flex-wrap gap-3">
+    <button type="submit" class="btn-primary">Сохранить</button>
+    <button type="submit" name="restart_wifi" value="1" class="btn-secondary">
+      Сохранить и перезапустить WiFi AP
+    </button>
+  </div>
+
+</form>
+{% endblock %}

@@ -316,6 +316,7 @@ install -m 644 "$SCRIPT_DIR/systemd/ltemod-bypass-update.service"  "$INSTALL_SYS
 install -m 644 "$SCRIPT_DIR/systemd/ltemod-bypass-update.timer"    "$INSTALL_SYSTEMD/ltemod-bypass-update.timer"
 install -m 644 "$SCRIPT_DIR/systemd/ltemod-vpn.service"            "$INSTALL_SYSTEMD/ltemod-vpn.service"
 install -m 644 "$SCRIPT_DIR/systemd/sing-box.service"              "$INSTALL_SYSTEMD/sing-box.service"
+install -m 644 "$SCRIPT_DIR/systemd/ltemod-web.service"            "$INSTALL_SYSTEMD/ltemod-web.service"
 ok "Systemd units installed"
 
 systemctl daemon-reload
@@ -338,6 +339,68 @@ ok "ltemod-vpn.service enabled (автостарт VPN по VPN_PROTO из ко�
 
 systemctl enable sing-box.service
 ok "sing-box.service enabled (ConditionFileNotEmpty: запустится только после setup-vless)"
+
+systemctl enable ltemod-web.service
+ok "ltemod-web.service enabled (веб-конфигуратор на порту 8080)"
+
+# ===== Веб-конфигуратор =====
+
+header "Installing web configurator"
+
+WEB_LIB="/usr/local/lib/ltemod-web"
+mkdir -p "$WEB_LIB"
+
+# Python deps: Flask + waitress
+info "Installing Python dependencies (flask, waitress)..."
+if python3 -m pip install --quiet flask waitress 2>/dev/null; then
+    ok "flask + waitress installed via pip"
+else
+    info "pip failed — trying apt-get..."
+    apt-get install -y python3-flask 2>/dev/null || true
+    python3 -m pip install --quiet waitress 2>/dev/null || true
+    ok "Attempted Flask install via apt, waitress via pip"
+fi
+
+# Copy web application files
+install -m 644 "$SCRIPT_DIR/web/app.py"    "$WEB_LIB/app.py"
+install -m 644 "$SCRIPT_DIR/web/auth.py"   "$WEB_LIB/auth.py"
+install -m 644 "$SCRIPT_DIR/web/config.py" "$WEB_LIB/config.py"
+install -m 644 "$SCRIPT_DIR/web/status.py" "$WEB_LIB/status.py"
+mkdir -p "$WEB_LIB/templates"
+cp -r "$SCRIPT_DIR/web/templates/"* "$WEB_LIB/templates/"
+chmod 644 "$WEB_LIB/templates/"*.html
+ok "Web app installed to $WEB_LIB"
+
+# Generate Flask session secret (persistent across restarts)
+if [[ ! -f "$INSTALL_CONF/web-secret" ]]; then
+    python3 -c "import os; open('$INSTALL_CONF/web-secret','wb').write(os.urandom(32))"
+    chmod 600 "$INSTALL_CONF/web-secret"
+    ok "Session secret generated: $INSTALL_CONF/web-secret"
+fi
+
+# Set web UI password
+if [[ ! -f "$INSTALL_CONF/web-auth" ]]; then
+    echo ""
+    info "Установи пароль для веб-конфигуратора (мин. 8 символов):"
+    while true; do
+        read -r -s -p "  Пароль: " _webpass; echo ""
+        read -r -s -p "  Повтор: " _webpass2; echo ""
+        if [[ "$_webpass" == "$_webpass2" && ${#_webpass} -ge 8 ]]; then
+            python3 -c "import hashlib,sys; print(hashlib.sha256(sys.argv[1].encode()).hexdigest())" \
+                "$_webpass" > "$INSTALL_CONF/web-auth"
+            chmod 600 "$INSTALL_CONF/web-auth"
+            ok "Пароль установлен: $INSTALL_CONF/web-auth"
+            unset _webpass _webpass2
+            break
+        fi
+        fail "Пароли не совпадают или слишком короткий. Повтор..."
+    done
+else
+    info "web-auth уже существует — пароль не изменён"
+    info "Для смены: python3 -c \"import hashlib,sys; print(hashlib.sha256(sys.argv[1].encode()).hexdigest())\" НОВЫЙ_ПАРОЛЬ > $INSTALL_CONF/web-auth"
+fi
+
+ok "Веб-конфигуратор установлен"
 
 # ===== NetworkManager — не вмешиваться в AP/VPN интерфейсы =====
 
@@ -440,7 +503,12 @@ echo "     sudo list-manager status              # статус: файлы + ip
 echo "     sudo bypass-routing status            # активные правила маршрутизации"
 echo "     # Списки обновляются автоматически каждый день в 04:00"
 echo ""
+echo -e "  ${YELLOW}9. Веб-конфигуратор (после первой загрузки):${NC}"
+echo "     http://192.168.10.1:8080  — с устройств подключённых по WiFi"
+echo "     http://$(hostname -I 2>/dev/null | awk '{print $1}'):8080  — из локальной сети"
+echo ""
 info "Logs: journalctl -u lte-modem -f"
 info "Logs: journalctl -u wifi-ap -f"
 info "Logs: journalctl -u sing-box -f"
+info "Logs: journalctl -u ltemod-web -f"
 echo ""

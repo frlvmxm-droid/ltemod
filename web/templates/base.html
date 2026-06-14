@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}ltemod{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { colors: { brand: '#3b82f6' } } }
+    }
+  </script>
+  <style>
+    .nav-link { @apply px-3 py-2 rounded text-sm font-medium text-slate-300 hover:bg-slate-700 hover:text-white transition-colors; }
+    .nav-link.active { @apply bg-slate-700 text-white; }
+    .card { @apply bg-slate-800 rounded-lg p-4 border border-slate-700; }
+    .badge-up { @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-900 text-green-300; }
+    .badge-down { @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-900 text-red-300; }
+    .badge-warn { @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-900 text-yellow-300; }
+    .btn-primary { @apply px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed; }
+    .btn-danger { @apply px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded transition-colors disabled:opacity-50; }
+    .btn-secondary { @apply px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white text-sm font-medium rounded transition-colors; }
+    .input-field { @apply w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white text-sm placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500; }
+    .label { @apply block text-sm font-medium text-slate-300 mb-1; }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+
+  <!-- Navigation -->
+  <nav class="bg-slate-800 border-b border-slate-700">
+    <div class="max-w-6xl mx-auto px-4">
+      <div class="flex items-center justify-between h-14">
+        <div class="flex items-center gap-2">
+          <span class="text-blue-400 font-bold text-lg">ltemod</span>
+          <span class="text-slate-500 text-xs hidden sm:block">Orange Pi 3 LTS</span>
+        </div>
+        <div class="flex items-center gap-1">
+          <a href="/dashboard" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">Dashboard</a>
+          <a href="/lte-wifi" class="nav-link {% if request.endpoint == 'lte_wifi' %}active{% endif %}">LTE + WiFi</a>
+          <a href="/vpn" class="nav-link {% if request.endpoint == 'vpn' %}active{% endif %}">VPN</a>
+          <a href="/bypass" class="nav-link {% if request.endpoint == 'bypass' %}active{% endif %}">Bypass</a>
+          <a href="/logout" class="nav-link text-slate-500 hover:text-red-400 ml-2">Выйти</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Flash messages -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="max-w-6xl mx-auto px-4 pt-3">
+        {% for category, message in messages %}
+          <div class="flex items-center gap-2 px-4 py-2 rounded mb-2 text-sm
+            {% if category == 'error' %}bg-red-900/60 border border-red-700 text-red-300
+            {% elif category == 'success' %}bg-green-900/60 border border-green-700 text-green-300
+            {% else %}bg-blue-900/60 border border-blue-700 text-blue-300{% endif %}">
+            <span>{% if category == 'error' %}✗{% elif category == 'success' %}✓{% else %}ℹ{% endif %}</span>
+            <span>{{ message }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <!-- Content -->
+  <main class="max-w-6xl mx-auto px-4 py-6">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="text-center text-slate-600 text-xs py-4 mt-8">
+    ltemod — LTE + VPN Router Suite
+  </footer>
+</body>
+</html>

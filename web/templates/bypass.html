@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}Bypass — ltemod{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-xl font-semibold">Bypass Routing</h1>
+  <div>
+    <span class="{% if bypass.active %}badge-up{% elif bypass.enabled %}badge-warn{% else %}badge-down{% endif %}">
+      {% if bypass.active %}ACTIVE{% elif bypass.enabled %}ENABLED (нет списков?){% else %}DISABLED{% endif %}
+    </span>
+  </div>
+</div>
+
+<form method="POST" action="/bypass">
+  <div class="card mb-4">
+    <h2 class="font-semibold text-slate-200 mb-4 pb-2 border-b border-slate-700">Настройки</h2>
+
+    <div class="flex items-center gap-3 mb-4">
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" id="BYPASS_ENABLED" name="BYPASS_ENABLED"
+               {% if bypass.enabled %}checked{% endif %}
+               class="w-4 h-4 accent-blue-500">
+        <span class="font-medium text-slate-200">Включить bypass routing</span>
+      </label>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-4">
+
+      <div>
+        <label class="label">Режим</label>
+        <div class="space-y-2">
+          <label class="flex items-start gap-2 cursor-pointer p-2 rounded hover:bg-slate-700/50">
+            <input type="radio" name="BYPASS_MODE" value="selective"
+                   {% if bypass.mode != 'exclude' %}checked{% endif %}
+                   class="mt-0.5 accent-blue-500">
+            <div>
+              <div class="text-sm text-slate-200">selective</div>
+              <div class="text-xs text-slate-500">Только заблокированные сайты идут через VPN, остальное — напрямую</div>
+            </div>
+          </label>
+          <label class="flex items-start gap-2 cursor-pointer p-2 rounded hover:bg-slate-700/50">
+            <input type="radio" name="BYPASS_MODE" value="exclude"
+                   {% if bypass.mode == 'exclude' %}checked{% endif %}
+                   class="mt-0.5 accent-blue-500">
+            <div>
+              <div class="text-sm text-slate-200">exclude</div>
+              <div class="text-xs text-slate-500">Весь трафик через VPN, кроме российских ресурсов (для VPN-постоянного режима)</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div>
+        <label class="label" for="BYPASS_LIST_PRESET">Пресет списков</label>
+        <select id="BYPASS_LIST_PRESET" name="BYPASS_LIST_PRESET" class="input-field mb-3">
+          <option value="none" {% if bypass.preset == 'none' %}selected{% endif %}>Без пресета (свои URL)</option>
+          <option value="russia-inside" {% if bypass.preset == 'russia-inside' %}selected{% endif %}>
+            russia-inside — заблокированные в РФ ресурсы
+          </option>
+          <option value="russia-outside" {% if bypass.preset == 'russia-outside' %}selected{% endif %}>
+            russia-outside — российские ресурсы (для exclude-режима)
+          </option>
+        </select>
+        <div class="text-xs text-slate-500">
+          Списки IP-адресов и доменов скачиваются из открытых источников и обновляются ежедневно в 04:00
+        </div>
+      </div>
+
+    </div>
+
+    <div class="flex gap-3">
+      <button type="submit" class="btn-primary">Сохранить</button>
+    </div>
+  </div>
+</form>
+
+<!-- Stats & Actions -->
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+
+  <div class="card">
+    <h3 class="font-semibold text-slate-200 mb-3">Статистика ipset</h3>
+    <div class="space-y-2 text-sm">
+      <div class="flex justify-between">
+        <span class="text-slate-400">IP-адресов</span>
+        <span id="ip-count" class="font-mono text-slate-200">{{ bypass.ipset_ip_count | default(0) }}</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-slate-400">Подсетей</span>
+        <span id="net-count" class="font-mono text-slate-200">{{ bypass.ipset_net_count | default(0) }}</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-slate-400">Bypass активен</span>
+        <span class="{% if bypass.active %}text-green-400{% else %}text-slate-500{% endif %}">
+          {{ 'да' if bypass.active else 'нет' }}
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 class="font-semibold text-slate-200 mb-3">Обновление списков</h3>
+    <p class="text-sm text-slate-400 mb-3">
+      Скачивает актуальные списки заблокированных IP и доменов (~1-2 минуты).
+      Выполняется автоматически каждый день в 04:00.
+    </p>
+    <button onclick="updateLists()" id="btn-update" class="btn-primary">
+      Обновить сейчас
+    </button>
+    <div id="update-msg" class="mt-2 text-sm text-slate-400 hidden"></div>
+  </div>
+
+</div>
+
+<script>
+async function updateLists() {
+  const btn = document.getElementById('btn-update');
+  const msg = document.getElementById('update-msg');
+  btn.disabled = true;
+  btn.textContent = 'Запускается...';
+  msg.classList.remove('hidden');
+  msg.className = 'mt-2 text-sm text-blue-300';
+  msg.textContent = 'Обновление запущено в фоне. Может занять 1–2 минуты. Счётчики обновятся автоматически.';
+
+  try {
+    const r = await fetch('/api/bypass/update-lists', { method: 'POST' });
+    const d = await r.json();
+    if (!d.ok) {
+      msg.className = 'mt-2 text-sm text-red-300';
+      msg.textContent = '✗ ' + (d.error || 'ошибка');
+    }
+  } catch(e) {
+    msg.className = 'mt-2 text-sm text-red-300';
+    msg.textContent = '✗ Ошибка сети';
+  }
+
+  btn.textContent = 'Обновить сейчас';
+  btn.disabled = false;
+
+  // Poll status after delay
+  setTimeout(async () => {
+    try {
+      const r = await fetch('/api/bypass/status');
+      const d = await r.json();
+      document.getElementById('ip-count').textContent = (d.ipset_ip_count || 0).toLocaleString();
+      document.getElementById('net-count').textContent = (d.ipset_net_count || 0).toLocaleString();
+    } catch(e) {}
+  }, 90000);
+}
+</script>
+{% endblock %}

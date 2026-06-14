@@ -1,0 +1,34 @@
+[Unit]
+Description=ltemod Web Configurator (Flask, port 8080)
+After=network.target lte-modem.service
+Wants=lte-modem.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/usr/local/lib/ltemod-web
+
+# Try waitress (pure-Python WSGI); fall back to Flask dev server
+ExecStart=/bin/bash -c '\
+    if python3 -c "import waitress" 2>/dev/null; then \
+        exec python3 -m waitress --host=0.0.0.0 --port=8080 --threads=4 app:app; \
+    else \
+        exec python3 app.py; \
+    fi'
+
+Restart=on-failure
+RestartSec=10
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+# Defence-in-depth (runs as root to call scripts without sudo)
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ltemod-web
+
+[Install]
+WantedBy=multi-user.target

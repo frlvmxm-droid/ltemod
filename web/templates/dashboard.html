@@ -1,0 +1,296 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — ltemod{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-xl font-semibold">Dashboard</h1>
+  <div class="flex items-center gap-3 text-sm text-slate-400">
+    <span id="status-indicator" class="flex items-center gap-1.5">
+      <span class="w-2 h-2 rounded-full bg-slate-600" id="dot"></span>
+      <span id="last-update">загрузка...</span>
+    </span>
+  </div>
+</div>
+
+<!-- Status grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+
+  <!-- LTE Card -->
+  <div class="card">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="font-semibold text-slate-200 flex items-center gap-2">
+        <span>📡</span> LTE Модем
+      </h2>
+      <span id="lte-badge" class="badge-warn">...</span>
+    </div>
+    <div class="space-y-2 text-sm">
+      <div class="flex justify-between">
+        <span class="text-slate-400">Оператор</span>
+        <span id="lte-operator" class="text-slate-200">—</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-slate-400">IP адрес</span>
+        <span id="lte-ip" class="font-mono text-slate-200">—</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-slate-400">Сигнал</span>
+        <span id="lte-signal" class="text-slate-200">—</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-slate-400">Трафик ↓/↑</span>
+        <span id="lte-traffic" class="font-mono text-slate-200">—</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-slate-400">Интерфейс</span>
+        <span id="lte-iface" class="font-mono text-xs text-slate-400">—</span>
+      </div>
+    </div>
+    <div class="mt-3 pt-3 border-t border-slate-700 flex gap-2">
+      <button onclick="reconnectModem()" class="btn-secondary text-xs py-1 px-3">Переподключить</button>
+    </div>
+  </div>
+
+  <!-- VPN Card -->
+  <div class="card">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="font-semibold text-slate-200 flex items-center gap-2">
+        <span>🔒</span> VPN
+      </h2>
+      <span id="vpn-badge" class="badge-warn">...</span>
+    </div>
+    <div class="space-y-2 text-sm">
+      <div class="flex justify-between">
+        <span class="text-slate-400">Активный режим</span>
+        <span id="vpn-mode" class="font-mono text-slate-200">—</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-slate-400">WireGuard</span>
+        <span id="vpn-wg" class="text-slate-200">—</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-slate-400">AmneziaWG</span>
+        <span id="vpn-amnezia" class="text-slate-200">—</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-slate-400">VLESS / sing-box</span>
+        <span id="vpn-vless" class="text-slate-200">—</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-slate-400">Kill-switch</span>
+        <span id="vpn-ks" class="text-slate-200">—</span>
+      </div>
+    </div>
+    <div class="mt-3 pt-3 border-t border-slate-700 flex gap-2 flex-wrap">
+      <button id="btn-vpn-off" onclick="toggleVPN('off','off')" class="btn-danger text-xs py-1 px-3">Выключить VPN</button>
+      <a href="/vpn" class="btn-secondary text-xs py-1 px-3">Настройки →</a>
+    </div>
+  </div>
+
+  <!-- WiFi Card -->
+  <div class="card">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="font-semibold text-slate-200 flex items-center gap-2">
+        <span>📶</span> WiFi AP
+      </h2>
+      <span id="wifi-badge" class="badge-warn">...</span>
+    </div>
+    <div class="space-y-2 text-sm">
+      <div class="flex justify-between">
+        <span class="text-slate-400">SSID</span>
+        <span id="wifi-ssid" class="text-slate-200">—</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-slate-400">IP роутера</span>
+        <span id="wifi-ip" class="font-mono text-slate-200">—</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-slate-400">Диапазон</span>
+        <span id="wifi-band" class="text-slate-200">—</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-slate-400">Клиентов</span>
+        <span id="wifi-clients" class="text-slate-200">—</span>
+      </div>
+    </div>
+    <div class="mt-3 pt-3 border-t border-slate-700 flex gap-2">
+      <button onclick="restartAP()" class="btn-secondary text-xs py-1 px-3">Перезапустить AP</button>
+    </div>
+  </div>
+
+  <!-- Bypass Card -->
+  <div class="card">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="font-semibold text-slate-200 flex items-center gap-2">
+        <span>🛡️</span> Bypass Routing
+      </h2>
+      <span id="bypass-badge" class="badge-warn">...</span>
+    </div>
+    <div class="space-y-2 text-sm">
+      <div class="flex justify-between">
+        <span class="text-slate-400">Режим</span>
+        <span id="bypass-mode" class="text-slate-200">—</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-slate-400">Пресет</span>
+        <span id="bypass-preset" class="text-slate-200">—</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-slate-400">IP-записей</span>
+        <span id="bypass-ip-count" class="font-mono text-slate-200">—</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-slate-400">Подсетей</span>
+        <span id="bypass-net-count" class="font-mono text-slate-200">—</span>
+      </div>
+    </div>
+    <div class="mt-3 pt-3 border-t border-slate-700">
+      <a href="/bypass" class="btn-secondary text-xs py-1 px-3">Настройки →</a>
+    </div>
+  </div>
+</div>
+
+<!-- Services card -->
+<div class="card">
+  <h2 class="font-semibold text-slate-200 mb-3">Сервисы</h2>
+  <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2" id="services-grid">
+    <div class="text-center text-slate-500 text-xs col-span-5">загрузка...</div>
+  </div>
+</div>
+
+<!-- Internet status banner -->
+<div id="internet-banner" class="mt-4 hidden"></div>
+
+<script>
+const POLL_MS = 8000;
+
+function fmtBytes(b) {
+  if (b === null || b === undefined) return '—';
+  if (b < 1024) return b + ' B';
+  if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+  if (b < 1024 * 1024 * 1024) return (b / 1024 / 1024).toFixed(1) + ' MB';
+  return (b / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+}
+
+function fmtAge(sec) {
+  if (sec === null || sec === undefined) return '—';
+  if (sec < 60) return sec + 'с назад';
+  if (sec < 3600) return Math.floor(sec / 60) + 'м назад';
+  return Math.floor(sec / 3600) + 'ч назад';
+}
+
+function setText(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val || '—';
+}
+
+function renderStatus(d) {
+  // LTE
+  const lteUp = d.lte && d.lte.up;
+  document.getElementById('lte-badge').className = lteUp ? 'badge-up' : 'badge-down';
+  document.getElementById('lte-badge').textContent = lteUp ? 'UP' : 'DOWN';
+  setText('lte-operator', d.lte?.operator || 'неизвестно');
+  setText('lte-ip', d.lte?.ip);
+  setText('lte-signal', d.lte?.signal_pct !== null ? d.lte.signal_pct + '%' : '—');
+  setText('lte-traffic', fmtBytes(d.lte?.rx_bytes) + ' / ' + fmtBytes(d.lte?.tx_bytes));
+  setText('lte-iface', d.lte?.iface);
+
+  // VPN
+  const mode = d.vpn?.active_mode || 'direct';
+  const vpnActive = mode !== 'direct';
+  document.getElementById('vpn-badge').className = vpnActive ? 'badge-up' : 'badge-down';
+  document.getElementById('vpn-badge').textContent = vpnActive ? mode.toUpperCase() : 'OFF';
+  setText('vpn-mode', mode === 'direct' ? 'прямой' : mode);
+  setText('vpn-wg', d.vpn?.wg?.up ? ('UP · ' + (d.vpn.wg.ip || '') + ' · ' + fmtAge(d.vpn.wg.handshake_age_sec)) : 'выключен');
+  setText('vpn-amnezia', d.vpn?.amnezia?.up ? 'UP' : 'выключен');
+  setText('vpn-vless', d.vpn?.vless?.running ? (d.vpn.vless.tun_up ? 'UP (TUN)' : 'запущен') : 'выключен');
+  setText('vpn-ks', d.vpn?.killswitch ? 'включён' : 'выключен');
+
+  // WiFi
+  const wifiOk = d.wifi_ap?.running;
+  document.getElementById('wifi-badge').className = wifiOk ? 'badge-up' : 'badge-down';
+  document.getElementById('wifi-badge').textContent = wifiOk ? 'UP' : (d.wifi_ap?.enabled ? 'STOPPED' : 'DISABLED');
+  setText('wifi-ssid', d.wifi_ap?.ssid);
+  setText('wifi-ip', d.wifi_ap?.ip);
+  setText('wifi-band', d.wifi_ap?.band ? d.wifi_ap.band.toUpperCase() : '—');
+  setText('wifi-clients', (d.wifi_ap?.client_count ?? 0) + ' устройств');
+
+  // Bypass
+  const bypassOk = d.bypass?.active;
+  document.getElementById('bypass-badge').className = bypassOk ? 'badge-up' : (d.bypass?.enabled ? 'badge-warn' : 'badge-down');
+  document.getElementById('bypass-badge').textContent = bypassOk ? 'ACTIVE' : (d.bypass?.enabled ? 'LOADING' : 'OFF');
+  setText('bypass-mode', d.bypass?.mode || '—');
+  setText('bypass-preset', d.bypass?.preset || '—');
+  setText('bypass-ip-count', (d.bypass?.ipset_ip_count ?? 0).toLocaleString());
+  setText('bypass-net-count', (d.bypass?.ipset_net_count ?? 0).toLocaleString());
+
+  // Services
+  const svcs = d.system?.services || {};
+  const grid = document.getElementById('services-grid');
+  grid.innerHTML = Object.entries(svcs).map(([name, state]) => {
+    const ok = state === 'active';
+    const color = ok ? 'text-green-400' : 'text-slate-500';
+    return `<div class="text-center">
+      <div class="text-xs ${color} font-mono truncate" title="${name}">${name.replace('.service','').replace('.timer','⏱')}</div>
+      <div class="text-xs ${ok ? 'text-green-300' : 'text-slate-600'}">${state}</div>
+    </div>`;
+  }).join('');
+
+  // Internet banner
+  const banner = document.getElementById('internet-banner');
+  if (!d.system?.internet_ok) {
+    banner.className = 'mt-4 px-4 py-2 bg-red-900/60 border border-red-700 text-red-300 rounded text-sm';
+    banner.textContent = '⚠ Интернет недоступен — watchdog попытается переподключить';
+    banner.classList.remove('hidden');
+  } else {
+    banner.classList.add('hidden');
+  }
+
+  // Timestamp
+  const dot = document.getElementById('dot');
+  dot.className = 'w-2 h-2 rounded-full ' + (lteUp ? 'bg-green-400' : 'bg-red-400');
+  document.getElementById('last-update').textContent = 'обновлено ' + new Date().toLocaleTimeString();
+}
+
+async function refresh() {
+  try {
+    const r = await fetch('/api/status', { signal: AbortSignal.timeout(12000) });
+    if (r.status === 401) { location.href = '/login'; return; }
+    if (!r.ok) return;
+    renderStatus(await r.json());
+  } catch(e) {
+    document.getElementById('last-update').textContent = 'ошибка обновления';
+  }
+}
+
+async function toggleVPN(proto, action) {
+  const btn = document.getElementById('btn-vpn-off');
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  try {
+    const r = await fetch('/api/vpn/toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ proto, action }),
+    });
+    await refresh();
+  } catch(e) {}
+  if (btn) { btn.disabled = false; btn.textContent = 'Выключить VPN'; }
+}
+
+async function restartAP() {
+  try {
+    await fetch('/api/ap/restart', { method: 'POST' });
+    setTimeout(refresh, 3000);
+  } catch(e) {}
+}
+
+async function reconnectModem() {
+  try {
+    await fetch('/api/modem/reconnect', { method: 'POST' });
+    setTimeout(refresh, 5000);
+  } catch(e) {}
+}
+
+refresh();
+setInterval(refresh, POLL_MS);
+</script>
+{% endblock %}

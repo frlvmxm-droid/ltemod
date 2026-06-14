@@ -55,7 +55,7 @@ fi
 # ---------------------------------------------------------------------------
 header "Disabling and removing systemd units"
 UNITS=(lte-modem.service lte-watchdog.timer lte-watchdog.service wifi-ap.service \
-       ltemod-vpn.service sing-box.service \
+       ltemod-vpn.service sing-box.service ltemod-web.service \
        ltemod-bypass-update.timer ltemod-bypass-update.service)
 for u in "${UNITS[@]}"; do
     systemctl stop "$u" &>/dev/null || true
@@ -81,7 +81,8 @@ done
 
 # ---------------------------------------------------------------------------
 header "Removing scripts and system config"
-[[ -d "$INSTALL_BIN" ]] && { rm -rf "$INSTALL_BIN"; ok "Removed $INSTALL_BIN"; }
+[[ -d "$INSTALL_BIN" ]]            && { rm -rf "$INSTALL_BIN";            ok "Removed $INSTALL_BIN"; }
+[[ -d "/usr/local/lib/ltemod-web" ]] && { rm -rf /usr/local/lib/ltemod-web; ok "Removed /usr/local/lib/ltemod-web"; }
 
 rm -f /etc/sysctl.d/99-ltemod.conf                  && ok "Removed sysctl drop-in" || true
 rm -f /etc/NetworkManager/conf.d/10-wifi-ap.conf \
@@ -97,7 +98,7 @@ systemctl reload NetworkManager &>/dev/null || true
 # ---------------------------------------------------------------------------
 header "Configs"
 if [[ $PURGE -eq 1 ]]; then
-    [[ -d "$INSTALL_CONF" ]] && { rm -rf "$INSTALL_CONF"; ok "Purged $INSTALL_CONF (configs, profiles, bypass lists)"; }
+    [[ -d "$INSTALL_CONF" ]] && { rm -rf "$INSTALL_CONF"; ok "Purged $INSTALL_CONF (configs, profiles, bypass lists, web-auth)"; }
     info "VPN secrets в /etc/wireguard, /etc/amnezia, /etc/sing-box НЕ тронуты (удалите вручную при необходимости)"
 else
     info "Kept $INSTALL_CONF (используйте --purge чтобы удалить конфиги, профили и bypass-списки)"

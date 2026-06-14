@@ -1,0 +1,29 @@
+[Unit]
+Description=ltemod VPN auto-start (reads VPN_PROTO from ltemod.conf)
+Documentation=https://github.com/frlvmxm-droid/ltemod
+After=lte-modem.service
+Requires=lte-modem.service
+ConditionFileNotEmpty=/etc/ltemod/ltemod.conf
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+
+# Читает VPN_PROTO из конфига и запускает нужный туннель.
+# Если VPN_PROTO="none" или конфиг туннеля не установлен — выходит без ошибки.
+ExecStart=/bin/bash -c '\
+    . /etc/ltemod/ltemod.conf; \
+    [[ "${VPN_PROTO:-none}" != "none" ]] && \
+    /usr/local/bin/ltemod/vpn-toggle.sh "$VPN_PROTO" on || true'
+
+ExecStop=/usr/local/bin/ltemod/vpn-toggle.sh off
+
+TimeoutStartSec=60
+TimeoutStopSec=30
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ltemod-vpn
+
+[Install]
+WantedBy=multi-user.target

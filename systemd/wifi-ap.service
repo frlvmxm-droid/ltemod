@@ -13,6 +13,11 @@ EnvironmentFile=-/etc/ltemod/ltemod.conf
 ExecStart=/usr/local/bin/ltemod/setup-ap.sh start
 ExecStop=/usr/local/bin/ltemod/setup-ap.sh stop
 ExecReload=/usr/local/bin/ltemod/setup-ap.sh restart
+Restart=on-failure
+RestartSec=10
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
 TimeoutStartSec=60
 TimeoutStopSec=15
 

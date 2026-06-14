@@ -314,6 +314,8 @@ install -m 644 "$SCRIPT_DIR/systemd/lte-watchdog.timer"            "$INSTALL_SYS
 install -m 644 "$SCRIPT_DIR/systemd/wifi-ap.service"               "$INSTALL_SYSTEMD/wifi-ap.service"
 install -m 644 "$SCRIPT_DIR/systemd/ltemod-bypass-update.service"  "$INSTALL_SYSTEMD/ltemod-bypass-update.service"
 install -m 644 "$SCRIPT_DIR/systemd/ltemod-bypass-update.timer"    "$INSTALL_SYSTEMD/ltemod-bypass-update.timer"
+install -m 644 "$SCRIPT_DIR/systemd/ltemod-vpn.service"            "$INSTALL_SYSTEMD/ltemod-vpn.service"
+install -m 644 "$SCRIPT_DIR/systemd/sing-box.service"              "$INSTALL_SYSTEMD/sing-box.service"
 ok "Systemd units installed"
 
 systemctl daemon-reload
@@ -328,13 +330,11 @@ ok "ltemod-bypass-update.timer enabled (daily at 04:00)"
 systemctl enable lte-modem.service
 ok "lte-modem.service enabled"
 
-# WiFi AP включать только если есть wlan0
-if [[ -d /sys/class/net/wlan0 ]]; then
-    systemctl enable wifi-ap.service
-    ok "wifi-ap.service enabled (wlan0 found)"
-else
-    info "wifi-ap.service: NOT enabled (wlan0 not found — will enable on first boot with WiFi)"
-fi
+systemctl enable wifi-ap.service
+ok "wifi-ap.service enabled (запустится при наличии wlan0)"
+
+systemctl enable ltemod-vpn.service
+ok "ltemod-vpn.service enabled (автостарт VPN по VPN_PROTO из конфига)"
 
 # ===== NetworkManager — не вмешиваться в AP/VPN интерфейсы =====
 
@@ -377,39 +377,36 @@ echo -e "${CYAN}╚════════════════════�
 echo ""
 echo "Next steps:"
 echo ""
-echo -e "  ${YELLOW}1. Автоопределить интерфейсы и настроить конфиг:${NC}"
+echo -e "  ${YELLOW}1. Автоопределить интерфейсы и APN:${NC}"
 echo "     sudo detect-hardware --write     # LAN/WiFi/WWAN интерфейсы"
+echo "     sudo detect-sim --write          # APN и USSD по SIM-карте"
 echo "     sudo nano /etc/ltemod/ltemod.conf"
-echo "     → APN провайдера"
 echo "     → WIFI_AP_SSID, WIFI_AP_PASSWORD (8..63 символов)"
 echo ""
-echo -e "  ${YELLOW}1.5 Проверить конфиг перед запуском:${NC}"
+echo -e "  ${YELLOW}2. Проверить конфиг и перезагрузить:${NC}"
 echo "     sudo ltemod-doctor               # поймает ошибки заранее"
-echo ""
-echo -e "  ${YELLOW}2. Перезагрузить (WiFi AP запустится автоматически):${NC}"
 echo "     sudo reboot"
-echo "     # или запустить вручную:"
-echo "     sudo systemctl start wifi-ap.service"
-echo "     sudo systemctl start lte-modem.service"
+echo "     # После перезагрузки автоматически запустятся:"
+echo "     #   lte-modem.service  → LTE подключение"
+echo "     #   wifi-ap.service    → WiFi точка доступа (если есть wlan0)"
 echo ""
-echo -e "  ${YELLOW}3. Настроить VPN (по выбору):${NC}"
+echo -e "  ${YELLOW}3. Настроить VPN — один раз:${NC}"
 echo ""
 echo "     [WireGuard]"
 echo "     cp $INSTALL_CONF/wg0.conf.template /tmp/wg0.conf"
-echo "     nano /tmp/wg0.conf"
+echo "     nano /tmp/wg0.conf                            # заполнить YOUR_* значения"
 echo "     sudo setup-vpn /tmp/wg0.conf"
+echo "     # Установить VPN_PROTO=wg в ltemod.conf → будет стартовать автоматически"
 echo ""
 echo "     [AmneziaWG]"
-echo "     cp $INSTALL_CONF/amnezia-wg.conf.template /tmp/awg0.conf"
-echo "     nano /tmp/awg0.conf"
 echo "     sudo setup-amnezia /tmp/awg0.conf"
+echo "     # VPN_PROTO=amnezia в ltemod.conf"
 echo ""
 echo "     [VLESS]"
-echo "     cp $INSTALL_CONF/vless.json.template /tmp/vless.json"
-echo "     nano /tmp/vless.json"
 echo "     sudo setup-vless /tmp/vless.json"
+echo "     # VPN_PROTO=vless в ltemod.conf"
 echo ""
-echo -e "  ${YELLOW}4. Включить VPN:${NC}"
+echo -e "  ${YELLOW}4. Включить VPN сейчас (автостарт уже настроен):${NC}"
 echo "     sudo vpn-toggle wg on        # WireGuard"
 echo "     sudo vpn-toggle amnezia on   # AmneziaWG"
 echo "     sudo vpn-toggle vless on     # VLESS"

@@ -23,6 +23,11 @@ ExecStartPost=/usr/local/bin/ltemod/setup-routing.sh
 ExecStop=/bin/bash -c 'nmcli connection down $NM_CON_NAME 2>/dev/null || true'
 
 # Ограничения
+Restart=on-failure
+RestartSec=30
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
 TimeoutStartSec=120
 TimeoutStopSec=30
 

@@ -1,0 +1,27 @@
+[Unit]
+Description=sing-box (VLESS TUN proxy for ltemod)
+Documentation=https://sing-box.sagernet.org/
+After=network-online.target
+Wants=network-online.target
+# Запускать только если конфиг установлен (setup-vless)
+ConditionFileNotEmpty=/etc/sing-box/config.json
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/sing-box run --config /etc/sing-box/config.json
+Restart=on-failure
+RestartSec=5
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+# Права для создания TUN-интерфейса и привязки к портам
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+NoNewPrivileges=yes
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sing-box
+
+[Install]
+WantedBy=multi-user.target

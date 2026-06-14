@@ -54,7 +54,8 @@ fi
 
 # ---------------------------------------------------------------------------
 header "Disabling and removing systemd units"
-UNITS=(lte-modem.service lte-watchdog.timer lte-watchdog.service wifi-ap.service sing-box.service \
+UNITS=(lte-modem.service lte-watchdog.timer lte-watchdog.service wifi-ap.service \
+       ltemod-vpn.service sing-box.service \
        ltemod-bypass-update.timer ltemod-bypass-update.service)
 for u in "${UNITS[@]}"; do
     systemctl stop "$u" &>/dev/null || true

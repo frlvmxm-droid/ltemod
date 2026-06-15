@@ -434,7 +434,14 @@ def api_clients_static():
 
     static_file = Path("/etc/dnsmasq.d/ltemod-static.conf")
     existing = static_file.read_text() if static_file.exists() else ""
-    lines = [l for l in existing.splitlines() if mac not in l.lower()]
+
+    def _entry_mac(line: str) -> str:
+        s = line.strip()
+        if s.startswith("dhcp-host="):
+            return s[len("dhcp-host="):].split(",")[0].lower()
+        return ""
+
+    lines = [l for l in existing.splitlines() if _entry_mac(l) != mac]
 
     if request.method == "POST":
         entry = f"dhcp-host={mac},{ip}"
@@ -606,6 +613,9 @@ def settings():
     return render_template("settings.html", config=conf, ddns=ddns_st)
 
 
+_SENSITIVE_FILES = {"web-auth", "web-secret"}
+
+
 @app.route("/api/backup")
 @login_required
 def api_backup():
@@ -614,7 +624,9 @@ def api_backup():
         conf_dir = Path("/etc/ltemod")
         if conf_dir.exists():
             for f in sorted(conf_dir.rglob("*")):
-                if f.is_file() and not f.name.endswith((".pyc", ".new")):
+                if (f.is_file()
+                        and not f.name.endswith((".pyc", ".new"))
+                        and f.name not in _SENSITIVE_FILES):
                     tar.add(str(f), arcname=str(f.relative_to("/etc")))
     buf.seek(0)
     return send_file(buf, mimetype="application/gzip",
@@ -633,6 +645,8 @@ def api_restore():
             for member in tar.getmembers():
                 safe_name = member.name.lstrip("/")
                 if not safe_name.startswith("ltemod/") or ".." in safe_name:
+                    continue
+                if Path(safe_name).name in _SENSITIVE_FILES:
                     continue
                 member.name = safe_name
                 tar.extract(member, "/etc", filter="data")

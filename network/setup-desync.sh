@@ -325,6 +325,13 @@ cmd_start() {
     iface=$(resolve_iface)
     log "=== Starting DPI desync (mode=$DESYNC_MODE, iface=$iface) ==="
 
+    # Always clean up previous mode first so re-runs and mode switches are idempotent.
+    # Without this, switching from rst-drop to mss (or vice-versa) would leave stale
+    # INPUT or mangle rules from the old mode alongside the new ones.
+    stop_nfqws
+    delete_chain
+    remove_rst_drop "$iface"
+
     case "$DESYNC_MODE" in
         mss)
             apply_mss "$iface"

@@ -56,7 +56,8 @@ fi
 header "Disabling and removing systemd units"
 UNITS=(lte-modem.service lte-watchdog.timer lte-watchdog.service wifi-ap.service \
        ltemod-vpn.service sing-box.service ltemod-web.service \
-       ltemod-bypass-update.timer ltemod-bypass-update.service)
+       ltemod-bypass-update.timer ltemod-bypass-update.service \
+       ltemod-desync.service ltemod-ddns.service ltemod-ddns.timer)
 for u in "${UNITS[@]}"; do
     systemctl stop "$u" &>/dev/null || true
     systemctl disable "$u" &>/dev/null || true
@@ -71,8 +72,9 @@ ok "systemd reloaded"
 # ---------------------------------------------------------------------------
 header "Removing symlinks"
 for cmd in vpn-toggle modem-status setup-vpn setup-amnezia setup-vless setup-ap \
-           setup-wifi-client detect-hardware ltemod-doctor vpn-profile killswitch \
-           data-usage sms bypass-routing list-manager; do
+           setup-wifi-client detect-hardware detect-sim ltemod-doctor vpn-profile killswitch \
+           data-usage sms bypass-routing list-manager \
+           setup-uplink setup-portfwd setup-ddns setup-dns setup-desync setup-awg-profiles; do
     if [[ -L "/usr/local/bin/$cmd" ]]; then
         rm -f "/usr/local/bin/$cmd"
         ok "Removed symlink: $cmd"

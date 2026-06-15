@@ -268,6 +268,9 @@ ROUTING_SCRIPT=$(find_script "setup-routing.sh") || true
 
 case "$CMD" in
     start)
+        # $2 lets the watchdog failover to a specific mode without editing ltemod.conf.
+        # Falls back to the config value when called without argument (normal boot path).
+        UPLINK_MODE="${2:-$UPLINK_MODE}"
         log "=== setup-uplink start (UPLINK_MODE=${UPLINK_MODE}) ==="
         case "$UPLINK_MODE" in
             lte)               start_lte         ;;

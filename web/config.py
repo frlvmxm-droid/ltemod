@@ -1,4 +1,5 @@
 import re
+import shlex
 from pathlib import Path
 
 CONF_PATH = Path("/etc/ltemod/ltemod.conf")
@@ -32,8 +33,18 @@ ALLOWED_KEYS = {
     "AWG_PROFILE",
 }
 
-# Matches: KEY="value" or KEY=value (no spaces in value, optional trailing comment)
-_RE_KEY = re.compile(r'^([A-Z_][A-Z0-9_]*)=("?)([^"#\n]*)\2\s*(?:#.*)?$')
+# Matches the KEY= prefix of a config line (value may be quoted any way).
+_RE_LINE_KEY = re.compile(r'^([A-Z_][A-Z0-9_]*)\s*=')
+
+
+def _sq(val: str) -> str:
+    """Return val single-quoted for safe shell sourcing.
+
+    Single-quoting is the only quoting mode that prevents ALL shell expansion
+    ($, ``, \\, etc.).  Single-quotes within the value are escaped as '\\''
+    (close-quote, literal-quote, reopen-quote).
+    """
+    return "'" + str(val).replace("'", "'\\''") + "'"
 
 
 def read_conf() -> dict:
@@ -41,9 +52,20 @@ def read_conf() -> dict:
     if not CONF_PATH.exists():
         return result
     for line in CONF_PATH.read_text().splitlines():
-        m = _RE_KEY.match(line.strip())
-        if m:
-            result[m.group(1)] = m.group(3)
+        stripped = line.strip()
+        if not stripped or stripped.startswith('#'):
+            continue
+        m = _RE_LINE_KEY.match(stripped)
+        if not m:
+            continue
+        key = m.group(1)
+        rest = stripped[m.end():]          # everything after KEY=
+        try:
+            vals = shlex.split(rest)
+            result[key] = vals[0] if vals else ''
+        except ValueError:
+            # Malformed quoting — best-effort strip
+            result[key] = rest.strip().strip("'\"")
     return result
 
 
@@ -58,11 +80,10 @@ def write_conf(updates: dict) -> None:
     updated: set = set()
     new_lines = []
     for line in lines:
-        m = _RE_KEY.match(line.rstrip("\n").strip())
+        m = _RE_LINE_KEY.match(line.strip())
         if m and m.group(1) in updates:
             key = m.group(1)
-            val = updates[key]
-            new_lines.append(f'{key}="{val}"\n')
+            new_lines.append(f'{key}={_sq(updates[key])}\n')
             updated.add(key)
         else:
             new_lines.append(line)
@@ -73,6 +94,6 @@ def write_conf(updates: dict) -> None:
         if new_lines and not new_lines[-1].endswith("\n"):
             new_lines.append("\n")
         for key in sorted(missing):
-            new_lines.append(f'{key}="{updates[key]}"\n')
+            new_lines.append(f'{key}={_sq(updates[key])}\n')
 
     CONF_PATH.write_text("".join(new_lines))

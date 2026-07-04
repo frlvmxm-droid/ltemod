@@ -1,4 +1,5 @@
 import hashlib
+import hmac
 import os
 from pathlib import Path
 from functools import wraps
@@ -23,7 +24,7 @@ def check_password(password: str) -> bool:
         return False
     stored = AUTH_FILE.read_text().strip()
     candidate = hashlib.sha256(password.encode()).hexdigest()
-    return hashlib.compare_digest(stored, candidate)
+    return hmac.compare_digest(stored, candidate)
 
 
 def login_required(f):
